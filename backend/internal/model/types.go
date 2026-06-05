@@ -24,18 +24,14 @@ type SimulateRequest struct {
 	Data                    string                   `json:"data" validate:"hex_bytes"`
 }
 
-type ScratchProjectResponse struct {
-	Path string `json:"path"`
-}
-
 type ProjectSourceFileRequest struct {
-	ProjectPath string `json:"projectPath" validate:"required,notblank"`
-	Path        string `json:"path" validate:"required,solidity_source_path"`
-	Source      string `json:"source" validate:"required,notblank"`
+	Path   string `json:"path" validate:"required,solidity_source_path"`
+	Source string `json:"source" validate:"required,notblank"`
 }
 
 type ProjectSourceFileResponse struct {
-	Path string `json:"path"`
+	ProjectPath string `json:"projectPath"`
+	Path        string `json:"path"`
 }
 
 type TxRequest struct {

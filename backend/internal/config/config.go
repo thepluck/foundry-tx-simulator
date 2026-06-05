@@ -19,7 +19,7 @@ type Config struct {
 	RepoRoot           string            `mapstructure:"repo_root"`
 	ProjectRoots       []string          `mapstructure:"project_roots"`
 	WorkDir            string            `mapstructure:"work_dir"`
-	ScratchProjectRoot string            `mapstructure:"scratch_project_root"`
+	DefaultProjectRoot string            `mapstructure:"default_project_root"`
 	ProjectCachePath   string            `mapstructure:"project_cache_path"`
 	TimeoutSeconds     int               `mapstructure:"timeout_seconds"`
 	MaxConcurrent      int               `mapstructure:"max_concurrent_runs"`
@@ -102,10 +102,10 @@ func LoadFile(path string) (Config, string, error) {
 			return Config{}, "", err
 		}
 	}
-	if cfg.ScratchProjectRoot == "" {
-		cfg.ScratchProjectRoot = filepath.Join(cfg.WorkDir, "scratch-projects")
+	if cfg.DefaultProjectRoot == "" {
+		cfg.DefaultProjectRoot = filepath.Join(cfg.WorkDir, "default-project")
 	} else {
-		cfg.ScratchProjectRoot, err = normalizeConfigPath(configDir, cfg.ScratchProjectRoot)
+		cfg.DefaultProjectRoot, err = normalizeConfigPath(configDir, cfg.DefaultProjectRoot)
 		if err != nil {
 			return Config{}, "", err
 		}

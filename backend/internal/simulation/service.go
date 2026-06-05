@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -656,8 +657,39 @@ func (s *Service) prepareFoundryExecution(req *model.SimulateRequest, runID stri
 	return execution, nil
 }
 
-func (s *Service) CreateScratchProject(ctx context.Context) (string, forge.Result, error) {
-	projectRoot := filepath.Join(s.scratchProjectRoot(), safeRunID(runid.New()))
+func (s *Service) AddDefaultProjectSourceFile(ctx context.Context, req model.ProjectSourceFileRequest) (model.ProjectSourceFileResponse, forge.Result, error) {
+	req.Path = strings.TrimSpace(req.Path)
+	if err := validateProjectSourceFileRequest(&req); err != nil {
+		return model.ProjectSourceFileResponse{}, forge.Result{}, err
+	}
+	projectRoot, initResult, err := s.ensureDefaultProject(ctx)
+	if err != nil {
+		return model.ProjectSourceFileResponse{}, initResult, err
+	}
+	relPath, err := normalizeProjectSourcePath(req.Path)
+	if err != nil {
+		return model.ProjectSourceFileResponse{}, forge.Result{}, err
+	}
+	sourcePath := filepath.Join(projectRoot, "src", filepath.FromSlash(relPath))
+	if err := os.MkdirAll(filepath.Dir(sourcePath), 0o755); err != nil {
+		return model.ProjectSourceFileResponse{}, forge.Result{}, err
+	}
+	if err := os.WriteFile(sourcePath, []byte(req.Source), 0o644); err != nil {
+		return model.ProjectSourceFileResponse{}, forge.Result{}, err
+	}
+	return model.ProjectSourceFileResponse{ProjectPath: projectRoot, Path: sourcePath}, initResult, nil
+}
+
+func (s *Service) ensureDefaultProject(ctx context.Context) (string, forge.Result, error) {
+	projectRoot := s.defaultProjectRoot()
+	if strings.TrimSpace(projectRoot) == "" {
+		return "", forge.Result{}, fmt.Errorf("default project root is not configured")
+	}
+	if _, err := os.Stat(filepath.Join(projectRoot, "foundry.toml")); err == nil {
+		return projectRoot, forge.Result{}, nil
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return projectRoot, forge.Result{}, err
+	}
 	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
 		return "", forge.Result{}, err
 	}
@@ -666,56 +698,21 @@ func (s *Service) CreateScratchProject(ctx context.Context) (string, forge.Resul
 	if initResult.Err != nil {
 		return projectRoot, initResult, initResult.Err
 	}
-	if err := resetScratchProjectDirs(projectRoot); err != nil {
+	if err := resetDefaultProjectDirs(projectRoot); err != nil {
 		return projectRoot, initResult, err
 	}
 	return projectRoot, initResult, nil
 }
 
-func (s *Service) AddProjectSourceFile(req model.ProjectSourceFileRequest) (string, error) {
-	req.ProjectPath = strings.TrimSpace(req.ProjectPath)
-	req.Path = strings.TrimSpace(req.Path)
-	if err := validateProjectSourceFileRequest(&req); err != nil {
-		return "", err
+func (s *Service) defaultProjectRoot() string {
+	if strings.TrimSpace(s.cfg.DefaultProjectRoot) != "" {
+		return s.cfg.DefaultProjectRoot
 	}
-	projectRoot, err := s.normalizeScratchProjectPath(req.ProjectPath)
-	if err != nil {
-		return "", err
-	}
-	relPath, err := normalizeProjectSourcePath(req.Path)
-	if err != nil {
-		return "", err
-	}
-	sourcePath := filepath.Join(projectRoot, "src", filepath.FromSlash(relPath))
-	if err := os.MkdirAll(filepath.Dir(sourcePath), 0o755); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(sourcePath, []byte(req.Source), 0o644); err != nil {
-		return "", err
-	}
-	return sourcePath, nil
-}
-
-func (s *Service) scratchProjectRoot() string {
-	if strings.TrimSpace(s.cfg.ScratchProjectRoot) != "" {
-		return s.cfg.ScratchProjectRoot
-	}
-	return filepath.Join(s.cfg.WorkDir, "scratch-projects")
-}
-
-func (s *Service) normalizeScratchProjectPath(value string) (string, error) {
-	projectRoot, ok := existingDirectoryPath(s.cfg.RepoRoot, value)
-	if !ok {
-		return "", fmt.Errorf("projectPath %q does not exist", strings.TrimSpace(value))
-	}
-	if !pathInsideRoot(s.scratchProjectRoot(), projectRoot) {
-		return "", fmt.Errorf("projectPath must be inside the configured scratch project root")
-	}
-	return projectRoot, nil
+	return filepath.Join(s.cfg.WorkDir, "default-project")
 }
 
 func (s *Service) shouldBuildProjectSrc(projectRoot string) bool {
-	if !pathInsideRoot(s.scratchProjectRoot(), projectRoot) {
+	if !pathInsideRoot(s.defaultProjectRoot(), projectRoot) {
 		return true
 	}
 	return projectHasSoliditySource(filepath.Join(projectRoot, "src"))
@@ -795,7 +792,7 @@ func (s *Service) buildProjectSrc(ctx context.Context, execution foundryExecutio
 	return s.forge.Run(ctx, args...)
 }
 
-func resetScratchProjectDirs(projectRoot string) error {
+func resetDefaultProjectDirs(projectRoot string) error {
 	for _, dir := range []string{"src", "test", "script"} {
 		path := filepath.Join(projectRoot, dir)
 		if err := os.RemoveAll(path); err != nil {

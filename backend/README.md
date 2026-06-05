@@ -76,7 +76,7 @@ Backend runtime settings and `./dev.sh` settings live in YAML:
 listen_addr: "127.0.0.1:8080"
 frontend_port: 5173
 work_dir: "backend/.runs"
-scratch_project_root: "backend/.runs/scratch-projects"
+default_project_root: "backend/.runs/default-project"
 project_cache_path: "backend/.runs/projects.json"
 timeout_seconds: 300
 max_concurrent_runs: 1
@@ -94,7 +94,7 @@ explorer_urls:
 
 Chain RPC endpoints are read from the YAML `rpc_urls` map. `explorer_urls` maps the same chain names to block explorer base URLs for frontend address links. `etherscan_api_key` is backend-side only and maps to `forge-kyber test --etherscan-api-key` and `cast-kyber run --etherscan-api-key`; set it directly in YAML or use `${ETHERSCAN_API_KEY}`. `frontend_port` controls the Vite server when using `./dev.sh`. Set `COINGECKO_API_KEY` in `.env` if you want CoinGecko requests to include a demo API key.
 
-Simulation records are stored in a SQLite database at `<work_dir>/records.sqlite`. `project_cache_path` stores recently used Foundry project paths. `scratch_project_root` stores scratch Foundry projects initialized from the UI. Local runs default to `backend/.runs/scratch-projects`; Docker uses a separate `/data/scratch-projects` volume.
+Simulation records are stored in a SQLite database at `<work_dir>/records.sqlite`. `project_cache_path` stores recently used Foundry project paths. `default_project_root` stores the default Foundry project. Local runs default to `backend/.runs/default-project`; Docker uses a separate `/data/default-project` volume.
 
 `max_concurrent_runs` controls the simulation worker pool size. Each worker lazily starts one quiet Anvil fork on a distinct port, reuses it across requests, and resets it with `anvil_reset` before later runs. `anvil_bin`, `anvil_host`, and `anvil_port_start` configure the local fork processes. Keep concurrency at `1` for the safest local behavior, or raise it if your machine/RPC can handle parallel simulations.
 
@@ -105,8 +105,7 @@ Simulation records are stored in a SQLite database at `<work_dir>/records.sqlite
 - `GET /health`
 - `GET /chains`
 - `GET /projects`
-- `POST /projects/scratch`
-- `POST /projects/scratch/source`
+- `POST /projects/default/source`
 - `GET /browse/project`
 - `POST /simulation`
 - `POST /tx`
@@ -115,9 +114,9 @@ Simulation records are stored in a SQLite database at `<work_dir>/records.sqlite
 
 `GET /browse/project` opens a native local folder picker and returns the selected project path. It is intended for the local frontend's Foundry Project browse button.
 
-`POST /projects/scratch` runs `forge init` and returns a generated Foundry project path under `scratch_project_root`. `POST /projects/scratch/source` writes one Solidity file under that project's `src/` folder.
+`POST /projects/default/source` writes one Solidity file under the default project's `src/` folder. The backend initializes the default project with `forge init` on first use.
 
-Inside Docker, native project browsing is unavailable because the backend runs in a Linux container. Use `/projects/scratch` and `/projects/scratch/source` through the UI to work with generated projects in the `scratch-projects` volume. `~` is supported in `projectPath` and configured project roots for local runs.
+Inside Docker, native project browsing is unavailable because the backend runs in a Linux container. Use `/projects/default/source` through the UI to work with the default project in the `default-project` volume. `~` is supported in `projectPath` and configured project roots for local runs.
 
 ## Simulate Request
 

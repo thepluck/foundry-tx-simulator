@@ -58,8 +58,7 @@ func (s *Server) Routes() http.Handler {
 	router.Get("/health", s.handleHealth)
 	router.Get("/chains", s.handleChains)
 	router.Get("/projects", s.handleProjects)
-	router.Post("/projects/scratch", s.handleCreateScratchProject)
-	router.Post("/projects/scratch/source", s.handleProjectSourceFile)
+	router.Post("/projects/default/source", s.handleProjectSourceFile)
 	router.Get("/browse/project", s.handleBrowseProject)
 	router.Get("/requests/{id}", s.handleRequestRecord)
 	router.Post("/simulation", s.handleSimulation)
@@ -123,29 +122,6 @@ func (s *Server) handleBrowseProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, model.BrowseProjectResponse{Path: path})
 }
 
-func (s *Server) handleCreateScratchProject(w http.ResponseWriter, r *http.Request) {
-	path, result, err := s.simulator.CreateScratchProject(r.Context())
-	slog.Info(
-		"scratch project init completed",
-		"path", path,
-		"exit_code", result.ExitCode,
-		"duration_ms", result.DurationMillis,
-		"stdout_bytes", len(result.Stdout),
-		"stderr_bytes", len(result.Stderr),
-		"error", err,
-	)
-	if err != nil {
-		status := forge.StatusFromCommandError(result.Err)
-		if result.Err == nil {
-			status = http.StatusInternalServerError
-		}
-		writeJSON(w, status, model.ErrorResponse{Error: "create scratch project: " + err.Error()})
-		return
-	}
-	s.rememberProjectPath(path)
-	writeJSON(w, http.StatusOK, model.ScratchProjectResponse{Path: path})
-}
-
 func (s *Server) handleProjectSourceFile(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if err := r.Body.Close(); err != nil {
@@ -162,12 +138,17 @@ func (s *Server) handleProjectSourceFile(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	path, err := s.simulator.AddProjectSourceFile(req)
+	payload, result, err := s.simulator.AddDefaultProjectSourceFile(r.Context(), req)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, model.ErrorResponse{Error: "add project source file: " + err.Error()})
+		status := http.StatusBadRequest
+		if result.Err != nil {
+			status = forge.StatusFromCommandError(result.Err)
+		}
+		writeJSON(w, status, model.ErrorResponse{Error: "add default project source file: " + err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, model.ProjectSourceFileResponse{Path: path})
+	s.rememberProjectPath(payload.ProjectPath)
+	writeJSON(w, http.StatusOK, payload)
 }
 
 func (s *Server) handleRequestRecord(w http.ResponseWriter, r *http.Request) {

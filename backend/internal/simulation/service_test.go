@@ -534,11 +534,11 @@ func TestPrepareFoundryExecutionUsesContentBasedTestCopyWithReferenceCount(t *te
 	}
 }
 
-func TestCreateScratchProjectInitializesFoundryProjectAndClearsDefaultSources(t *testing.T) {
-	scratchRoot := filepath.Join(t.TempDir(), "scratch-projects")
+func TestAddDefaultProjectSourceFileInitializesProjectAndWritesSource(t *testing.T) {
+	defaultProjectRoot := filepath.Join(t.TempDir(), "default-project")
 	service := NewService(config.Config{
 		WorkDir:            t.TempDir(),
-		ScratchProjectRoot: scratchRoot,
+		DefaultProjectRoot: defaultProjectRoot,
 		TimeoutSeconds:     30,
 		MaxConcurrent:      1,
 		RPCURLs: map[string]string{
@@ -551,21 +551,35 @@ func TestCreateScratchProjectInitializesFoundryProjectAndClearsDefaultSources(t 
 	}
 	service.forge = fake
 
-	projectRoot, result, err := service.CreateScratchProject(context.Background())
+	payload, result, err := service.AddDefaultProjectSourceFile(context.Background(), model.ProjectSourceFileRequest{
+		Path:   "tokens/MyToken.sol",
+		Source: "pragma solidity ^0.8.0; contract MyToken {}",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result.Stdout != "initialized\n" {
 		t.Fatalf("init result = %#v", result)
 	}
-	if !hasArgSequence(fake.calls[0], "init", projectRoot, "--no-git") {
+	if !hasArgSequence(fake.calls[0], "init", defaultProjectRoot, "--no-git") {
 		t.Fatalf("unexpected forge init args: %#v", fake.calls)
 	}
-	if !pathInsideRoot(scratchRoot, projectRoot) {
-		t.Fatalf("project root %q is not inside %q", projectRoot, scratchRoot)
+	if payload.ProjectPath != defaultProjectRoot {
+		t.Fatalf("project path = %q, want %q", payload.ProjectPath, defaultProjectRoot)
 	}
-	for _, dir := range []string{"src", "test", "script"} {
-		entries, err := os.ReadDir(filepath.Join(projectRoot, dir))
+	wantPath := filepath.Join(defaultProjectRoot, "src", "tokens", "MyToken.sol")
+	if payload.Path != wantPath {
+		t.Fatalf("source path = %q, want %q", payload.Path, wantPath)
+	}
+	source, err := os.ReadFile(wantPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(source) != "pragma solidity ^0.8.0; contract MyToken {}" {
+		t.Fatalf("source = %q", source)
+	}
+	for _, dir := range []string{"test", "script"} {
+		entries, err := os.ReadDir(filepath.Join(defaultProjectRoot, dir))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -575,16 +589,22 @@ func TestCreateScratchProjectInitializesFoundryProjectAndClearsDefaultSources(t 
 	}
 }
 
-func TestAddProjectSourceFileWritesOnlyInsideScratchProjectSrc(t *testing.T) {
-	scratchRoot := t.TempDir()
-	projectRoot := filepath.Join(scratchRoot, "project")
-	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+func TestAddDefaultProjectSourceFileAddsToExistingDefaultProject(t *testing.T) {
+	defaultProjectRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(defaultProjectRoot, "foundry.toml"), []byte("[profile.default]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(defaultProjectRoot, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	existingPath := filepath.Join(defaultProjectRoot, "src", "Existing.sol")
+	if err := os.WriteFile(existingPath, []byte("pragma solidity ^0.8.0; contract Existing {}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	service := NewService(config.Config{
 		RepoRoot:           t.TempDir(),
 		WorkDir:            t.TempDir(),
-		ScratchProjectRoot: scratchRoot,
+		DefaultProjectRoot: defaultProjectRoot,
 		TimeoutSeconds:     30,
 		MaxConcurrent:      1,
 		RPCURLs: map[string]string{
@@ -592,18 +612,25 @@ func TestAddProjectSourceFileWritesOnlyInsideScratchProjectSrc(t *testing.T) {
 		},
 	})
 	t.Cleanup(service.Close)
+	fake := &fakeForgeRunner{}
+	service.forge = fake
 
-	sourcePath, err := service.AddProjectSourceFile(model.ProjectSourceFileRequest{
-		ProjectPath: projectRoot,
-		Path:        "tokens/MyToken.sol",
-		Source:      "pragma solidity ^0.8.0; contract MyToken {}",
+	payload, _, err := service.AddDefaultProjectSourceFile(context.Background(), model.ProjectSourceFileRequest{
+		Path:   "tokens/MyToken.sol",
+		Source: "pragma solidity ^0.8.0; contract MyToken {}",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantPath := filepath.Join(projectRoot, "src", "tokens", "MyToken.sol")
-	if sourcePath != wantPath {
-		t.Fatalf("source path = %q, want %q", sourcePath, wantPath)
+	if len(fake.calls) != 0 {
+		t.Fatalf("existing default project should not run forge init: %#v", fake.calls)
+	}
+	wantPath := filepath.Join(defaultProjectRoot, "src", "tokens", "MyToken.sol")
+	if payload.ProjectPath != defaultProjectRoot {
+		t.Fatalf("project path = %q, want %q", payload.ProjectPath, defaultProjectRoot)
+	}
+	if payload.Path != wantPath {
+		t.Fatalf("source path = %q, want %q", payload.Path, wantPath)
 	}
 	source, err := os.ReadFile(wantPath)
 	if err != nil {
@@ -612,22 +639,34 @@ func TestAddProjectSourceFileWritesOnlyInsideScratchProjectSrc(t *testing.T) {
 	if string(source) != "pragma solidity ^0.8.0; contract MyToken {}" {
 		t.Fatalf("source = %q", source)
 	}
+	if _, err := os.Stat(existingPath); err != nil {
+		t.Fatalf("existing source should remain: %v", err)
+	}
+}
 
-	if _, err := service.AddProjectSourceFile(model.ProjectSourceFileRequest{
-		ProjectPath: projectRoot,
-		Path:        "../Escape.sol",
-		Source:      "pragma solidity ^0.8.0;",
+func TestAddDefaultProjectSourceFileRejectsInvalidPathBeforeInit(t *testing.T) {
+	service := NewService(config.Config{
+		RepoRoot:           t.TempDir(),
+		WorkDir:            t.TempDir(),
+		DefaultProjectRoot: filepath.Join(t.TempDir(), "default-project"),
+		TimeoutSeconds:     30,
+		MaxConcurrent:      1,
+		RPCURLs: map[string]string{
+			"mainnet": "http://127.0.0.1:8545",
+		},
+	})
+	t.Cleanup(service.Close)
+	fake := &fakeForgeRunner{}
+	service.forge = fake
+
+	if _, _, err := service.AddDefaultProjectSourceFile(context.Background(), model.ProjectSourceFileRequest{
+		Path:   "../Escape.sol",
+		Source: "pragma solidity ^0.8.0;",
 	}); err == nil {
 		t.Fatal("expected path traversal to fail")
 	}
-
-	outsideProject := t.TempDir()
-	if _, err := service.AddProjectSourceFile(model.ProjectSourceFileRequest{
-		ProjectPath: outsideProject,
-		Path:        "Outside.sol",
-		Source:      "pragma solidity ^0.8.0;",
-	}); err == nil {
-		t.Fatal("expected project outside scratch root to fail")
+	if len(fake.calls) != 0 {
+		t.Fatalf("invalid source path should not run forge init: %#v", fake.calls)
 	}
 }
 

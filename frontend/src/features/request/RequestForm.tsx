@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEventHandler, type FormEventHandler } from "react";
-import { addProjectSourceFile, browseProject, createScratchProject } from "../../api/client";
+import { addProjectSourceFile, browseProject } from "../../api/client";
 import type { FormState, HealthStatus, RequestTab, ThemeMode, UpdateForm } from "../../app/form";
 import ProjectHistoryDropdown from "./ProjectHistoryDropdown";
 import ScriptOverridesTab from "./ScriptOverridesTab";
@@ -63,7 +63,6 @@ export default function RequestForm(props: RequestFormProps) {
   const [sourceFilePath, setSourceFilePath] = useState("Contract.sol");
   const [sourceFileText, setSourceFileText] = useState("");
   const [isBrowsingProject, setIsBrowsingProject] = useState(false);
-  const [isCreatingScratchProject, setIsCreatingScratchProject] = useState(false);
   const [isAddingSourceFile, setIsAddingSourceFile] = useState(false);
   const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
   const [isImportPanelOpen, setIsImportPanelOpen] = useState(false);
@@ -99,33 +98,18 @@ export default function RequestForm(props: RequestFormProps) {
     }
   };
 
-  const handleCreateScratchProject = async () => {
-    setBrowseError("");
-    setProjectActionStatus("");
-    setIsCreatingScratchProject(true);
-    try {
-      const path = await createScratchProject(form.apiUrl);
-      onUpdate("projectPath", path);
-      onProjectBrowsed(path);
-      setProjectActionStatus(`Created ${path}`);
-    } catch (err) {
-      setBrowseError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setIsCreatingScratchProject(false);
-    }
-  };
-
   const handleAddSourceFile = async () => {
     setBrowseError("");
     setProjectActionStatus("");
     setIsAddingSourceFile(true);
     try {
-      const path = await addProjectSourceFile(form.apiUrl, {
-        projectPath: form.projectPath,
+      const result = await addProjectSourceFile(form.apiUrl, {
         path: sourceFilePath,
         source: sourceFileText
       });
-      setProjectActionStatus(`Added ${path}`);
+      onUpdate("projectPath", result.projectPath);
+      onProjectBrowsed(result.projectPath);
+      setProjectActionStatus(`Added ${result.path}`);
     } catch (err) {
       setBrowseError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -362,9 +346,6 @@ export default function RequestForm(props: RequestFormProps) {
                 <button className="browse-button" type="button" disabled={isBrowsingProject} onClick={handleBrowseProject}>
                   {isBrowsingProject ? "Choosing..." : "Browse"}
                 </button>
-                <button className="browse-button" type="button" disabled={isCreatingScratchProject} onClick={handleCreateScratchProject}>
-                  {isCreatingScratchProject ? "Creating..." : "New Scratch"}
-                </button>
               </span>
               {browseError && <span className="field-error">{browseError}</span>}
               {projectActionStatus && <span className="field-status">{projectActionStatus}</span>}
@@ -388,7 +369,7 @@ export default function RequestForm(props: RequestFormProps) {
               <button
                 className="secondary-button"
                 type="button"
-                disabled={isAddingSourceFile || !form.projectPath.trim()}
+                disabled={isAddingSourceFile}
                 onClick={handleAddSourceFile}
               >
                 {isAddingSourceFile ? "Adding..." : "Add Source"}

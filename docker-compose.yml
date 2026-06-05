@@ -15,7 +15,7 @@ services:
       - "${TXSIM_BACKEND_PORT:-8080}:8080"
     volumes:
       - backend-runs:/data/runs
-      - scratch-projects:/data/scratch-projects
+      - default-project:/data/default-project
 
   frontend:
     build:
@@ -30,4 +30,4 @@ services:
 
 volumes:
   backend-runs:
-  scratch-projects:
+  default-project:

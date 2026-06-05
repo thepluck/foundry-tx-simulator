@@ -83,7 +83,7 @@ App settings are read from YAML config. `config.yml` is the local config, and `c
 listen_addr: "127.0.0.1:8080"
 frontend_port: 5173
 work_dir: "backend/.runs"
-scratch_project_root: "backend/.runs/scratch-projects"
+default_project_root: "backend/.runs/default-project"
 forge_bin: "forge-kyber"
 cast_bin: "cast-kyber"
 anvil_bin: "anvil-kyber"
@@ -119,7 +119,7 @@ rpc_urls:
   mainnet: "${MAINNET_RPC_URL}"
 ```
 
-Use YAML fields such as `listen_addr`, `frontend_port`, `work_dir`, `scratch_project_root`, `max_concurrent_runs`, `anvil_port_start`, `rpc_urls`, `explorer_urls`, and `etherscan_api_key` for backend and `./dev.sh` settings. Runtime-only environment variables such as `COINGECKO_API_KEY` are still read directly by the code that needs them. `TXSIM_API_URL` is still available when running the frontend directly and the browser should call a specific backend URL.
+Use YAML fields such as `listen_addr`, `frontend_port`, `work_dir`, `default_project_root`, `max_concurrent_runs`, `anvil_port_start`, `rpc_urls`, `explorer_urls`, and `etherscan_api_key` for backend and `./dev.sh` settings. Runtime-only environment variables such as `COINGECKO_API_KEY` are still read directly by the code that needs them. `TXSIM_API_URL` is still available when running the frontend directly and the browser should call a specific backend URL.
 
 Keep local `forge_bin` set to `forge-kyber`, `cast_bin` set to `cast-kyber`,
 and `anvil_bin` set to `anvil-kyber`. Set request field `decodeInternal` to
@@ -133,7 +133,7 @@ For local deployment without Docker:
 (cd frontend && TXSIM_API_URL=http://127.0.0.1:8080 yarn dev)
 ```
 
-Local deployment stores saved simulation records in `backend/.runs/records.sqlite`, recently used Foundry project paths in `backend/.runs/projects.json`, and generated scratch Foundry projects in `backend/.runs/scratch-projects` by default.
+Local deployment stores saved simulation records in `backend/.runs/records.sqlite`, recently used Foundry project paths in `backend/.runs/projects.json`, and the default Foundry project in `backend/.runs/default-project` by default.
 
 ## Docker Run
 
@@ -149,7 +149,7 @@ Then open:
 - Backend: `http://127.0.0.1:8080`
 - Swagger UI: `http://127.0.0.1:8080/docs`
 
-Docker stores recently used Foundry project paths in the `backend-runs` volume at `/data/runs/projects.json`, so project suggestions survive container rebuilds. Scratch Foundry projects created from the UI live in the separate `scratch-projects` volume at `/data/scratch-projects`.
+Docker stores recently used Foundry project paths in the `backend-runs` volume at `/data/runs/projects.json`, so project suggestions survive container rebuilds. The default Foundry project lives in the separate `default-project` volume at `/data/default-project`.
 The backend image installs the pinned Kyber Foundry release and runs as
 `linux/amd64`, matching the release's published Linux archive.
 
@@ -161,7 +161,7 @@ TXSIM_BACKEND_PORT=18080 TXSIM_FRONTEND_PORT=15173 docker compose up --build
 
 The frontend container uses `TXSIM_BACKEND_PORT` to generate its browser runtime config, so the default API URL follows the published backend port. Set `TXSIM_API_URL` if the browser should call a different backend URL.
 
-Inside Docker, use New Scratch in the UI to initialize a Foundry project with `forge init`, then Add Source to write Solidity files into that project's `src/` folder. The native folder picker is only available when the backend runs locally on macOS.
+Inside Docker, Add Source writes Solidity files into the default project's `src/` folder. The backend initializes that project with `forge init` on first use. The native folder picker is only available when the backend runs locally on macOS.
 
 ## Release
 

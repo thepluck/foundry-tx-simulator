@@ -121,31 +121,24 @@ test("replays a transaction through the tx endpoint", async ({ page }) => {
   expect(simulationCalls).toBe(0);
 });
 
-test("creates a scratch project and adds source outside the simulation request", async ({ page }) => {
+test("adds source to the default project outside the simulation request", async ({ page }) => {
   await routeBaseEndpoints(page);
-  const scratchProjectPath = "/data/scratch-projects/browser-scratch";
-  await page.route(`${apiURL}/projects/scratch`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ path: scratchProjectPath })
-    });
-  });
-  await page.route(`${apiURL}/projects/scratch/source`, async (route) => {
+  const defaultProjectPath = "/data/default-project";
+  await page.route(`${apiURL}/projects/default/source`, async (route) => {
     const request = route.request().postDataJSON() as {
       projectPath?: string;
       path?: string;
       source?: string;
     };
     expect(request).toMatchObject({
-      projectPath: scratchProjectPath,
       path: "Token.sol",
       source: "pragma solidity ^0.8.0; contract Token {}"
     });
+    expect(request.projectPath).toBeUndefined();
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ path: `${scratchProjectPath}/src/Token.sol` })
+      body: JSON.stringify({ projectPath: defaultProjectPath, path: `${defaultProjectPath}/src/Token.sol` })
     });
   });
   await page.route(`${apiURL}/simulation`, async (route) => {
@@ -157,29 +150,29 @@ test("creates a scratch project and adds source outside the simulation request",
       target?: string;
       data?: string;
     };
-    expect(request.projectPath).toBe(scratchProjectPath);
+    expect(request.projectPath).toBe(defaultProjectPath);
     expect(request.projectSourceFiles).toBeUndefined();
     expect(JSON.stringify(request)).not.toContain("contract Token");
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ ...simulateResponse(), id: "scratch-project-run" })
+      body: JSON.stringify({ ...simulateResponse(), id: "default-project-run" })
     });
   });
 
   await page.goto("/");
-  await page.getByRole("button", { name: "New Scratch" }).click();
-  await expect(page.getByLabel("Foundry Project")).toHaveValue(scratchProjectPath);
+  await expect(page.getByRole("button", { name: "Default Project" })).toHaveCount(0);
   await page.getByLabel("Source File").fill("Token.sol");
   await page.getByLabel("Source", { exact: true }).fill("pragma solidity ^0.8.0; contract Token {}");
   await page.getByRole("button", { name: "Add Source" }).click();
-  await expect(page.getByText(`${scratchProjectPath}/src/Token.sol`)).toBeVisible();
+  await expect(page.getByLabel("Foundry Project")).toHaveValue(defaultProjectPath);
+  await expect(page.getByText(`${defaultProjectPath}/src/Token.sol`)).toBeVisible();
   await page.getByLabel("Block").fill("23000000");
   await page.getByLabel("Sender").fill(spender);
   await page.getByLabel("Target").fill(token);
   await page.getByLabel("Calldata").fill("0x23b872dd");
   await page.getByRole("button", { name: "Run Simulation" }).click();
-  await expect(page.getByText("success | 12ms | exit 0 | scratch-project-run")).toBeVisible();
+  await expect(page.getByText("success | 12ms | exit 0 | default-project-run")).toBeVisible();
 });
 
 test("exports and imports simulation input and output", async ({ page }, testInfo) => {
