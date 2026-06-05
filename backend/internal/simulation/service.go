@@ -656,8 +656,8 @@ func (s *Service) prepareFoundryExecution(req *model.SimulateRequest, runID stri
 	return execution, nil
 }
 
-func (s *Service) CreateEmptyProject(ctx context.Context) (string, forge.Result, error) {
-	projectRoot := filepath.Join(s.emptyProjectRoot(), safeRunID(runid.New()))
+func (s *Service) CreateScratchProject(ctx context.Context) (string, forge.Result, error) {
+	projectRoot := filepath.Join(s.scratchProjectRoot(), safeRunID(runid.New()))
 	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
 		return "", forge.Result{}, err
 	}
@@ -666,7 +666,7 @@ func (s *Service) CreateEmptyProject(ctx context.Context) (string, forge.Result,
 	if initResult.Err != nil {
 		return projectRoot, initResult, initResult.Err
 	}
-	if err := resetEmptyProjectDirs(projectRoot); err != nil {
+	if err := resetScratchProjectDirs(projectRoot); err != nil {
 		return projectRoot, initResult, err
 	}
 	return projectRoot, initResult, nil
@@ -678,7 +678,7 @@ func (s *Service) AddProjectSourceFile(req model.ProjectSourceFileRequest) (stri
 	if err := validateProjectSourceFileRequest(&req); err != nil {
 		return "", err
 	}
-	projectRoot, err := s.normalizeEmptyProjectPath(req.ProjectPath)
+	projectRoot, err := s.normalizeScratchProjectPath(req.ProjectPath)
 	if err != nil {
 		return "", err
 	}
@@ -696,26 +696,26 @@ func (s *Service) AddProjectSourceFile(req model.ProjectSourceFileRequest) (stri
 	return sourcePath, nil
 }
 
-func (s *Service) emptyProjectRoot() string {
-	if strings.TrimSpace(s.cfg.EmptyProjectRoot) != "" {
-		return s.cfg.EmptyProjectRoot
+func (s *Service) scratchProjectRoot() string {
+	if strings.TrimSpace(s.cfg.ScratchProjectRoot) != "" {
+		return s.cfg.ScratchProjectRoot
 	}
-	return filepath.Join(s.cfg.WorkDir, "empty-projects")
+	return filepath.Join(s.cfg.WorkDir, "scratch-projects")
 }
 
-func (s *Service) normalizeEmptyProjectPath(value string) (string, error) {
+func (s *Service) normalizeScratchProjectPath(value string) (string, error) {
 	projectRoot, ok := existingDirectoryPath(s.cfg.RepoRoot, value)
 	if !ok {
 		return "", fmt.Errorf("projectPath %q does not exist", strings.TrimSpace(value))
 	}
-	if !pathInsideRoot(s.emptyProjectRoot(), projectRoot) {
-		return "", fmt.Errorf("projectPath must be inside the configured empty project root")
+	if !pathInsideRoot(s.scratchProjectRoot(), projectRoot) {
+		return "", fmt.Errorf("projectPath must be inside the configured scratch project root")
 	}
 	return projectRoot, nil
 }
 
 func (s *Service) shouldBuildProjectSrc(projectRoot string) bool {
-	if !pathInsideRoot(s.emptyProjectRoot(), projectRoot) {
+	if !pathInsideRoot(s.scratchProjectRoot(), projectRoot) {
 		return true
 	}
 	return projectHasSoliditySource(filepath.Join(projectRoot, "src"))
@@ -795,7 +795,7 @@ func (s *Service) buildProjectSrc(ctx context.Context, execution foundryExecutio
 	return s.forge.Run(ctx, args...)
 }
 
-func resetEmptyProjectDirs(projectRoot string) error {
+func resetScratchProjectDirs(projectRoot string) error {
 	for _, dir := range []string{"src", "test", "script"} {
 		path := filepath.Join(projectRoot, dir)
 		if err := os.RemoveAll(path); err != nil {

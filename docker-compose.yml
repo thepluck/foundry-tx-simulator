@@ -15,7 +15,7 @@ services:
       - "${TXSIM_BACKEND_PORT:-8080}:8080"
     volumes:
       - backend-runs:/data/runs
-      - empty-projects:/data/empty-projects
+      - scratch-projects:/data/scratch-projects
 
   frontend:
     build:
@@ -30,4 +30,4 @@ services:
 
 volumes:
   backend-runs:
-  empty-projects:
+  scratch-projects:

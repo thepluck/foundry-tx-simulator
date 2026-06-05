@@ -43,11 +43,11 @@ func TestOpenAPIEndpoint(t *testing.T) {
 	if _, ok := paths["/projects"]; !ok {
 		t.Fatalf("missing /projects path: %#v", paths)
 	}
-	if _, ok := paths["/projects/empty"]; !ok {
-		t.Fatalf("missing /projects/empty path: %#v", paths)
+	if _, ok := paths["/projects/scratch"]; !ok {
+		t.Fatalf("missing /projects/scratch path: %#v", paths)
 	}
-	if _, ok := paths["/projects/source"]; !ok {
-		t.Fatalf("missing /projects/source path: %#v", paths)
+	if _, ok := paths["/projects/scratch/source"]; !ok {
+		t.Fatalf("missing /projects/scratch/source path: %#v", paths)
 	}
 	if _, ok := paths["/requests/{id}"]; !ok {
 		t.Fatalf("missing /requests/{id} path: %#v", paths)
@@ -78,7 +78,7 @@ func TestOpenAPIEndpoint(t *testing.T) {
 		t.Fatalf("etherscanApiKey should be backend config, not a request property: %#v", properties)
 	}
 	if _, ok := properties["projectSourceFiles"]; ok {
-		t.Fatalf("projectSourceFiles should be managed by /projects/source, not /simulation: %#v", properties)
+		t.Fatalf("projectSourceFiles should be managed by /projects/scratch/source, not /simulation: %#v", properties)
 	}
 	if _, ok := properties["decodeInternal"]; !ok {
 		t.Fatalf("decodeInternal should be a request property: %#v", properties)
@@ -202,10 +202,10 @@ func TestProjectsEndpoint(t *testing.T) {
 	}
 }
 
-func TestProjectSourceFileEndpointWritesIntoEmptyProject(t *testing.T) {
+func TestProjectSourceFileEndpointWritesIntoScratchProject(t *testing.T) {
 	cfg := testConfig(t)
-	cfg.EmptyProjectRoot = t.TempDir()
-	projectRoot := filepath.Join(cfg.EmptyProjectRoot, "project")
+	cfg.ScratchProjectRoot = t.TempDir()
+	projectRoot := filepath.Join(cfg.ScratchProjectRoot, "project")
 	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestProjectSourceFileEndpointWritesIntoEmptyProject(t *testing.T) {
   "path": "tokens/MyToken.sol",
   "source": "pragma solidity ^0.8.0; contract MyToken {}"
 }`)
-	req := httptest.NewRequest(http.MethodPost, "/projects/source", body)
+	req := httptest.NewRequest(http.MethodPost, "/projects/scratch/source", body)
 	rec := httptest.NewRecorder()
 
 	server.Routes().ServeHTTP(rec, req)
@@ -242,7 +242,7 @@ func TestProjectSourceFileEndpointWritesIntoEmptyProject(t *testing.T) {
 
 func TestProjectSourceFileEndpointRejectsOutsideProject(t *testing.T) {
 	cfg := testConfig(t)
-	cfg.EmptyProjectRoot = t.TempDir()
+	cfg.ScratchProjectRoot = t.TempDir()
 	outsideProject := t.TempDir()
 	server := NewServer(cfg, "")
 	body := strings.NewReader(`{
@@ -250,7 +250,7 @@ func TestProjectSourceFileEndpointRejectsOutsideProject(t *testing.T) {
   "path": "Outside.sol",
   "source": "pragma solidity ^0.8.0;"
 }`)
-	req := httptest.NewRequest(http.MethodPost, "/projects/source", body)
+	req := httptest.NewRequest(http.MethodPost, "/projects/scratch/source", body)
 	rec := httptest.NewRecorder()
 
 	server.Routes().ServeHTTP(rec, req)

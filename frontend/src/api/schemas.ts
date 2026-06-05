@@ -61,7 +61,7 @@ export const browseProjectResponseSchema = z.object({
   path: z.string().min(1)
 });
 
-export const emptyProjectResponseSchema = z.object({
+export const scratchProjectResponseSchema = z.object({
   path: z.string().min(1)
 });
 
@@ -172,7 +172,7 @@ export type StateOverride = z.infer<typeof stateOverrideSchema>;
 export type CompilerConfig = z.infer<typeof compilerConfigSchema>;
 export type ChainConfig = z.infer<typeof chainConfigSchema>;
 export type ProjectsResponse = z.infer<typeof projectsResponseSchema>;
-export type EmptyProjectResponse = z.infer<typeof emptyProjectResponseSchema>;
+export type ScratchProjectResponse = z.infer<typeof scratchProjectResponseSchema>;
 export type ProjectSourceFileRequest = z.infer<typeof projectSourceFileRequestSchema>;
 export type ProjectSourceFileResponse = z.infer<typeof projectSourceFileResponseSchema>;
 export type SimulateRequest = z.infer<typeof simulateRequestSchema>;

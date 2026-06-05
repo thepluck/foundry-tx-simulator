@@ -14,23 +14,23 @@ import (
 )
 
 type Config struct {
-	ListenAddr       string            `mapstructure:"listen_addr"`
-	FrontendPort     int               `mapstructure:"frontend_port"`
-	RepoRoot         string            `mapstructure:"repo_root"`
-	ProjectRoots     []string          `mapstructure:"project_roots"`
-	WorkDir          string            `mapstructure:"work_dir"`
-	EmptyProjectRoot string            `mapstructure:"empty_project_root"`
-	ProjectCachePath string            `mapstructure:"project_cache_path"`
-	TimeoutSeconds   int               `mapstructure:"timeout_seconds"`
-	MaxConcurrent    int               `mapstructure:"max_concurrent_runs"`
-	ForgeBin         string            `mapstructure:"forge_bin"`
-	CastBin          string            `mapstructure:"cast_bin"`
-	AnvilBin         string            `mapstructure:"anvil_bin"`
-	AnvilHost        string            `mapstructure:"anvil_host"`
-	AnvilPortStart   int               `mapstructure:"anvil_port_start"`
-	EtherscanAPIKey  string            `mapstructure:"etherscan_api_key"`
-	RPCURLs          map[string]string `mapstructure:"rpc_urls"`
-	ExplorerURLs     map[string]string `mapstructure:"explorer_urls"`
+	ListenAddr         string            `mapstructure:"listen_addr"`
+	FrontendPort       int               `mapstructure:"frontend_port"`
+	RepoRoot           string            `mapstructure:"repo_root"`
+	ProjectRoots       []string          `mapstructure:"project_roots"`
+	WorkDir            string            `mapstructure:"work_dir"`
+	ScratchProjectRoot string            `mapstructure:"scratch_project_root"`
+	ProjectCachePath   string            `mapstructure:"project_cache_path"`
+	TimeoutSeconds     int               `mapstructure:"timeout_seconds"`
+	MaxConcurrent      int               `mapstructure:"max_concurrent_runs"`
+	ForgeBin           string            `mapstructure:"forge_bin"`
+	CastBin            string            `mapstructure:"cast_bin"`
+	AnvilBin           string            `mapstructure:"anvil_bin"`
+	AnvilHost          string            `mapstructure:"anvil_host"`
+	AnvilPortStart     int               `mapstructure:"anvil_port_start"`
+	EtherscanAPIKey    string            `mapstructure:"etherscan_api_key"`
+	RPCURLs            map[string]string `mapstructure:"rpc_urls"`
+	ExplorerURLs       map[string]string `mapstructure:"explorer_urls"`
 }
 
 const (
@@ -102,10 +102,10 @@ func LoadFile(path string) (Config, string, error) {
 			return Config{}, "", err
 		}
 	}
-	if cfg.EmptyProjectRoot == "" {
-		cfg.EmptyProjectRoot = filepath.Join(cfg.WorkDir, "empty-projects")
+	if cfg.ScratchProjectRoot == "" {
+		cfg.ScratchProjectRoot = filepath.Join(cfg.WorkDir, "scratch-projects")
 	} else {
-		cfg.EmptyProjectRoot, err = normalizeConfigPath(configDir, cfg.EmptyProjectRoot)
+		cfg.ScratchProjectRoot, err = normalizeConfigPath(configDir, cfg.ScratchProjectRoot)
 		if err != nil {
 			return Config{}, "", err
 		}

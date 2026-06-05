@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEventHandler, type FormEventHandler } from "react";
-import { addProjectSourceFile, browseProject, createEmptyProject } from "../../api/client";
+import { addProjectSourceFile, browseProject, createScratchProject } from "../../api/client";
 import type { FormState, HealthStatus, RequestTab, ThemeMode, UpdateForm } from "../../app/form";
 import ProjectHistoryDropdown from "./ProjectHistoryDropdown";
 import ScriptOverridesTab from "./ScriptOverridesTab";
@@ -63,7 +63,7 @@ export default function RequestForm(props: RequestFormProps) {
   const [sourceFilePath, setSourceFilePath] = useState("Contract.sol");
   const [sourceFileText, setSourceFileText] = useState("");
   const [isBrowsingProject, setIsBrowsingProject] = useState(false);
-  const [isCreatingEmptyProject, setIsCreatingEmptyProject] = useState(false);
+  const [isCreatingScratchProject, setIsCreatingScratchProject] = useState(false);
   const [isAddingSourceFile, setIsAddingSourceFile] = useState(false);
   const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
   const [isImportPanelOpen, setIsImportPanelOpen] = useState(false);
@@ -99,19 +99,19 @@ export default function RequestForm(props: RequestFormProps) {
     }
   };
 
-  const handleCreateEmptyProject = async () => {
+  const handleCreateScratchProject = async () => {
     setBrowseError("");
     setProjectActionStatus("");
-    setIsCreatingEmptyProject(true);
+    setIsCreatingScratchProject(true);
     try {
-      const path = await createEmptyProject(form.apiUrl);
+      const path = await createScratchProject(form.apiUrl);
       onUpdate("projectPath", path);
       onProjectBrowsed(path);
       setProjectActionStatus(`Created ${path}`);
     } catch (err) {
       setBrowseError(err instanceof Error ? err.message : String(err));
     } finally {
-      setIsCreatingEmptyProject(false);
+      setIsCreatingScratchProject(false);
     }
   };
 
@@ -362,8 +362,8 @@ export default function RequestForm(props: RequestFormProps) {
                 <button className="browse-button" type="button" disabled={isBrowsingProject} onClick={handleBrowseProject}>
                   {isBrowsingProject ? "Choosing..." : "Browse"}
                 </button>
-                <button className="browse-button" type="button" disabled={isCreatingEmptyProject} onClick={handleCreateEmptyProject}>
-                  {isCreatingEmptyProject ? "Creating..." : "New Empty"}
+                <button className="browse-button" type="button" disabled={isCreatingScratchProject} onClick={handleCreateScratchProject}>
+                  {isCreatingScratchProject ? "Creating..." : "New Scratch"}
                 </button>
               </span>
               {browseError && <span className="field-error">{browseError}</span>}

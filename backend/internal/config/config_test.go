@@ -54,8 +54,8 @@ explorer_urls:
 	if cfg.ProjectCachePath != filepath.Join(workDir, "projects.json") {
 		t.Fatalf("project cache path = %q, want default under work dir", cfg.ProjectCachePath)
 	}
-	if cfg.EmptyProjectRoot != filepath.Join(workDir, "empty-projects") {
-		t.Fatalf("empty project root = %q, want default under work dir", cfg.EmptyProjectRoot)
+	if cfg.ScratchProjectRoot != filepath.Join(workDir, "scratch-projects") {
+		t.Fatalf("scratch project root = %q, want default under work dir", cfg.ScratchProjectRoot)
 	}
 }
 
@@ -167,7 +167,7 @@ func TestLoadUsesConfigValuesDespiteEnv(t *testing.T) {
 frontend_port: 5174
 repo_root: "."
 work_dir: "config-runs"
-empty_project_root: "empty-projects"
+scratch_project_root: "scratch-projects"
 timeout_seconds: 1
 max_concurrent_runs: 1
 forge_bin: "forge-config"
@@ -198,8 +198,8 @@ explorer_urls:
 	if cfg.WorkDir != filepath.Join(configDir, "config-runs") {
 		t.Fatalf("work dir = %q, want config value", cfg.WorkDir)
 	}
-	if cfg.EmptyProjectRoot != filepath.Join(configDir, "empty-projects") {
-		t.Fatalf("empty project root = %q, want config value", cfg.EmptyProjectRoot)
+	if cfg.ScratchProjectRoot != filepath.Join(configDir, "scratch-projects") {
+		t.Fatalf("scratch project root = %q, want config value", cfg.ScratchProjectRoot)
 	}
 	if cfg.TimeoutSeconds != 1 {
 		t.Fatalf("timeout seconds = %d, want config value", cfg.TimeoutSeconds)
@@ -358,8 +358,8 @@ func TestLoadUsesViperDefaults(t *testing.T) {
 	if cfg.ProjectCachePath != filepath.Join(configDir, "backend", ".runs", "projects.json") {
 		t.Fatalf("project cache path = %q, want default under work dir", cfg.ProjectCachePath)
 	}
-	if cfg.EmptyProjectRoot != filepath.Join(configDir, "backend", ".runs", "empty-projects") {
-		t.Fatalf("empty project root = %q, want default under work dir", cfg.EmptyProjectRoot)
+	if cfg.ScratchProjectRoot != filepath.Join(configDir, "backend", ".runs", "scratch-projects") {
+		t.Fatalf("scratch project root = %q, want default under work dir", cfg.ScratchProjectRoot)
 	}
 	if cfg.TimeoutSeconds != 300 {
 		t.Fatalf("timeout seconds = %d, want viper default", cfg.TimeoutSeconds)

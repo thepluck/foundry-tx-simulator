@@ -3,7 +3,7 @@ import type { ZodType } from "zod";
 import {
   browseProjectResponseSchema,
   chainConfigSchema,
-  emptyProjectResponseSchema,
+  scratchProjectResponseSchema,
   errorResponseSchema,
   projectSourceFileResponseSchema,
   projectsResponseSchema,
@@ -50,19 +50,19 @@ export async function browseProject(apiUrl: string): Promise<string> {
   return parsePayload(browseProjectResponseSchema, payload, "browse project").path;
 }
 
-export async function createEmptyProject(apiUrl: string): Promise<string> {
-  const response = await fetch(`${trimSlash(apiUrl)}/projects/empty`, {
+export async function createScratchProject(apiUrl: string): Promise<string> {
+  const response = await fetch(`${trimSlash(apiUrl)}/projects/scratch`, {
     method: "POST"
   });
   const payload = await readJSON(response);
   if (!response.ok) {
-    throw new Error(errorMessage(payload, `empty project request failed: ${response.status}`));
+    throw new Error(errorMessage(payload, `scratch project request failed: ${response.status}`));
   }
-  return parsePayload(emptyProjectResponseSchema, payload, "empty project").path;
+  return parsePayload(scratchProjectResponseSchema, payload, "scratch project").path;
 }
 
 export async function addProjectSourceFile(apiUrl: string, request: ProjectSourceFileRequest): Promise<string> {
-  const response = await fetch(`${trimSlash(apiUrl)}/projects/source`, {
+  const response = await fetch(`${trimSlash(apiUrl)}/projects/scratch/source`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"

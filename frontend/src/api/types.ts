@@ -6,7 +6,7 @@ export type {
   ERC20BalanceOverride,
   ERC20Transfer,
   ERC721ApprovalOverride,
-  EmptyProjectResponse,
+  ScratchProjectResponse,
   LabelOverride,
   ProjectSourceFileRequest,
   ProjectSourceFileResponse,

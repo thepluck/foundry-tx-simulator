@@ -24,7 +24,7 @@ type SimulateRequest struct {
 	Data                    string                   `json:"data" validate:"hex_bytes"`
 }
 
-type EmptyProjectResponse struct {
+type ScratchProjectResponse struct {
 	Path string `json:"path"`
 }
 

@@ -534,13 +534,13 @@ func TestPrepareFoundryExecutionUsesContentBasedTestCopyWithReferenceCount(t *te
 	}
 }
 
-func TestCreateEmptyProjectInitializesFoundryProjectAndClearsDefaultSources(t *testing.T) {
-	emptyRoot := filepath.Join(t.TempDir(), "empty-projects")
+func TestCreateScratchProjectInitializesFoundryProjectAndClearsDefaultSources(t *testing.T) {
+	scratchRoot := filepath.Join(t.TempDir(), "scratch-projects")
 	service := NewService(config.Config{
-		WorkDir:          t.TempDir(),
-		EmptyProjectRoot: emptyRoot,
-		TimeoutSeconds:   30,
-		MaxConcurrent:    1,
+		WorkDir:            t.TempDir(),
+		ScratchProjectRoot: scratchRoot,
+		TimeoutSeconds:     30,
+		MaxConcurrent:      1,
 		RPCURLs: map[string]string{
 			"mainnet": "http://127.0.0.1:8545",
 		},
@@ -551,7 +551,7 @@ func TestCreateEmptyProjectInitializesFoundryProjectAndClearsDefaultSources(t *t
 	}
 	service.forge = fake
 
-	projectRoot, result, err := service.CreateEmptyProject(context.Background())
+	projectRoot, result, err := service.CreateScratchProject(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -561,8 +561,8 @@ func TestCreateEmptyProjectInitializesFoundryProjectAndClearsDefaultSources(t *t
 	if !hasArgSequence(fake.calls[0], "init", projectRoot, "--no-git") {
 		t.Fatalf("unexpected forge init args: %#v", fake.calls)
 	}
-	if !pathInsideRoot(emptyRoot, projectRoot) {
-		t.Fatalf("project root %q is not inside %q", projectRoot, emptyRoot)
+	if !pathInsideRoot(scratchRoot, projectRoot) {
+		t.Fatalf("project root %q is not inside %q", projectRoot, scratchRoot)
 	}
 	for _, dir := range []string{"src", "test", "script"} {
 		entries, err := os.ReadDir(filepath.Join(projectRoot, dir))
@@ -575,18 +575,18 @@ func TestCreateEmptyProjectInitializesFoundryProjectAndClearsDefaultSources(t *t
 	}
 }
 
-func TestAddProjectSourceFileWritesOnlyInsideEmptyProjectSrc(t *testing.T) {
-	emptyRoot := t.TempDir()
-	projectRoot := filepath.Join(emptyRoot, "project")
+func TestAddProjectSourceFileWritesOnlyInsideScratchProjectSrc(t *testing.T) {
+	scratchRoot := t.TempDir()
+	projectRoot := filepath.Join(scratchRoot, "project")
 	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	service := NewService(config.Config{
-		RepoRoot:         t.TempDir(),
-		WorkDir:          t.TempDir(),
-		EmptyProjectRoot: emptyRoot,
-		TimeoutSeconds:   30,
-		MaxConcurrent:    1,
+		RepoRoot:           t.TempDir(),
+		WorkDir:            t.TempDir(),
+		ScratchProjectRoot: scratchRoot,
+		TimeoutSeconds:     30,
+		MaxConcurrent:      1,
 		RPCURLs: map[string]string{
 			"mainnet": "http://127.0.0.1:8545",
 		},
@@ -627,7 +627,7 @@ func TestAddProjectSourceFileWritesOnlyInsideEmptyProjectSrc(t *testing.T) {
 		Path:        "Outside.sol",
 		Source:      "pragma solidity ^0.8.0;",
 	}); err == nil {
-		t.Fatal("expected project outside empty root to fail")
+		t.Fatal("expected project outside scratch root to fail")
 	}
 }
 

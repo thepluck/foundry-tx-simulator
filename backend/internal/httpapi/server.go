@@ -58,8 +58,8 @@ func (s *Server) Routes() http.Handler {
 	router.Get("/health", s.handleHealth)
 	router.Get("/chains", s.handleChains)
 	router.Get("/projects", s.handleProjects)
-	router.Post("/projects/empty", s.handleCreateEmptyProject)
-	router.Post("/projects/source", s.handleProjectSourceFile)
+	router.Post("/projects/scratch", s.handleCreateScratchProject)
+	router.Post("/projects/scratch/source", s.handleProjectSourceFile)
 	router.Get("/browse/project", s.handleBrowseProject)
 	router.Get("/requests/{id}", s.handleRequestRecord)
 	router.Post("/simulation", s.handleSimulation)
@@ -123,10 +123,10 @@ func (s *Server) handleBrowseProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, model.BrowseProjectResponse{Path: path})
 }
 
-func (s *Server) handleCreateEmptyProject(w http.ResponseWriter, r *http.Request) {
-	path, result, err := s.simulator.CreateEmptyProject(r.Context())
+func (s *Server) handleCreateScratchProject(w http.ResponseWriter, r *http.Request) {
+	path, result, err := s.simulator.CreateScratchProject(r.Context())
 	slog.Info(
-		"empty project init completed",
+		"scratch project init completed",
 		"path", path,
 		"exit_code", result.ExitCode,
 		"duration_ms", result.DurationMillis,
@@ -139,11 +139,11 @@ func (s *Server) handleCreateEmptyProject(w http.ResponseWriter, r *http.Request
 		if result.Err == nil {
 			status = http.StatusInternalServerError
 		}
-		writeJSON(w, status, model.ErrorResponse{Error: "create empty project: " + err.Error()})
+		writeJSON(w, status, model.ErrorResponse{Error: "create scratch project: " + err.Error()})
 		return
 	}
 	s.rememberProjectPath(path)
-	writeJSON(w, http.StatusOK, model.EmptyProjectResponse{Path: path})
+	writeJSON(w, http.StatusOK, model.ScratchProjectResponse{Path: path})
 }
 
 func (s *Server) handleProjectSourceFile(w http.ResponseWriter, r *http.Request) {
