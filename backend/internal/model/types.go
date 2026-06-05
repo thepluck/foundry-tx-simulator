@@ -24,6 +24,20 @@ type SimulateRequest struct {
 	Data                    string                   `json:"data" validate:"hex_bytes"`
 }
 
+type EmptyProjectResponse struct {
+	Path string `json:"path"`
+}
+
+type ProjectSourceFileRequest struct {
+	ProjectPath string `json:"projectPath" validate:"required,notblank"`
+	Path        string `json:"path" validate:"required,solidity_source_path"`
+	Source      string `json:"source" validate:"required,notblank"`
+}
+
+type ProjectSourceFileResponse struct {
+	Path string `json:"path"`
+}
+
 type TxRequest struct {
 	Chain          string `json:"chain" validate:"required"`
 	TxHash         string `json:"txHash" validate:"required,tx_hash"`

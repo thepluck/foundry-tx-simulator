@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -42,6 +43,12 @@ func TestOpenAPIEndpoint(t *testing.T) {
 	if _, ok := paths["/projects"]; !ok {
 		t.Fatalf("missing /projects path: %#v", paths)
 	}
+	if _, ok := paths["/projects/empty"]; !ok {
+		t.Fatalf("missing /projects/empty path: %#v", paths)
+	}
+	if _, ok := paths["/projects/source"]; !ok {
+		t.Fatalf("missing /projects/source path: %#v", paths)
+	}
 	if _, ok := paths["/requests/{id}"]; !ok {
 		t.Fatalf("missing /requests/{id} path: %#v", paths)
 	}
@@ -69,6 +76,9 @@ func TestOpenAPIEndpoint(t *testing.T) {
 	}
 	if _, ok := properties["etherscanApiKey"]; ok {
 		t.Fatalf("etherscanApiKey should be backend config, not a request property: %#v", properties)
+	}
+	if _, ok := properties["projectSourceFiles"]; ok {
+		t.Fatalf("projectSourceFiles should be managed by /projects/source, not /simulation: %#v", properties)
 	}
 	if _, ok := properties["decodeInternal"]; !ok {
 		t.Fatalf("decodeInternal should be a request property: %#v", properties)
@@ -189,6 +199,64 @@ func TestProjectsEndpoint(t *testing.T) {
 		if projects[i] != want[i] {
 			t.Fatalf("projects = %#v, want %#v", projects, want)
 		}
+	}
+}
+
+func TestProjectSourceFileEndpointWritesIntoEmptyProject(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.EmptyProjectRoot = t.TempDir()
+	projectRoot := filepath.Join(cfg.EmptyProjectRoot, "project")
+	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	server := NewServer(cfg, "")
+	body := strings.NewReader(`{
+  "projectPath": "` + filepath.ToSlash(projectRoot) + `",
+  "path": "tokens/MyToken.sol",
+  "source": "pragma solidity ^0.8.0; contract MyToken {}"
+}`)
+	req := httptest.NewRequest(http.MethodPost, "/projects/source", body)
+	rec := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var payload model.ProjectSourceFileResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	wantPath := filepath.Join(projectRoot, "src", "tokens", "MyToken.sol")
+	if payload.Path != wantPath {
+		t.Fatalf("path = %q, want %q", payload.Path, wantPath)
+	}
+	source, err := os.ReadFile(wantPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(source) != "pragma solidity ^0.8.0; contract MyToken {}" {
+		t.Fatalf("source = %q", source)
+	}
+}
+
+func TestProjectSourceFileEndpointRejectsOutsideProject(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.EmptyProjectRoot = t.TempDir()
+	outsideProject := t.TempDir()
+	server := NewServer(cfg, "")
+	body := strings.NewReader(`{
+  "projectPath": "` + filepath.ToSlash(outsideProject) + `",
+  "path": "Outside.sol",
+  "source": "pragma solidity ^0.8.0;"
+}`)
+	req := httptest.NewRequest(http.MethodPost, "/projects/source", body)
+	rec := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
 }
 

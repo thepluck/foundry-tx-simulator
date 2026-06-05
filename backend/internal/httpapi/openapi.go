@@ -112,6 +112,9 @@ func registerOpenAPISchemas(schemas openapi3.Schemas) error {
 		{"ChainsResponse", model.ChainsResponse{}},
 		{"ProjectsResponse", model.ProjectsResponse{}},
 		{"BrowseProjectResponse", model.BrowseProjectResponse{}},
+		{"EmptyProjectResponse", model.EmptyProjectResponse{}},
+		{"ProjectSourceFileRequest", model.ProjectSourceFileRequest{}},
+		{"ProjectSourceFileResponse", model.ProjectSourceFileResponse{}},
 		{"SimulationRecord", model.SimulationRecord{}},
 		{"SimulateRequest", model.SimulateRequest{}},
 		{"TxRequest", model.TxRequest{}},
@@ -235,6 +238,15 @@ func enrichOpenAPISchemas(schemas openapi3.Schemas) {
 	setPropertyDescription(schemas, "ProjectsResponse", "projects", "Most recently used Foundry project paths.")
 	setPropertyDescription(schemas, "BrowseProjectResponse", "path", "Absolute path selected by the local backend folder picker.")
 	setPropertyExample(schemas, "BrowseProjectResponse", "path", "~/foundry-project")
+	setPropertyDescription(schemas, "EmptyProjectResponse", "path", "Absolute path to a newly initialized empty Foundry project.")
+	setPropertyExample(schemas, "EmptyProjectResponse", "path", "~/foundry-tx-simulator/backend/.runs/empty-projects/20260511T120000_000000000_deadbeef")
+	setPropertyDescription(schemas, "ProjectSourceFileRequest", "projectPath", "Empty project root returned by /projects/empty.")
+	setPropertyExample(schemas, "ProjectSourceFileRequest", "projectPath", "~/foundry-tx-simulator/backend/.runs/empty-projects/20260511T120000_000000000_deadbeef")
+	setPropertyDescription(schemas, "ProjectSourceFileRequest", "path", "Relative Solidity file path under src.")
+	setPropertyExample(schemas, "ProjectSourceFileRequest", "path", "MyToken.sol")
+	setPropertyDescription(schemas, "ProjectSourceFileRequest", "source", "Solidity source to write.")
+	setPropertyDescription(schemas, "ProjectSourceFileResponse", "path", "Absolute path to the written Solidity source file.")
+	setPropertyExample(schemas, "ProjectSourceFileResponse", "path", "~/foundry-tx-simulator/backend/.runs/empty-projects/20260511T120000_000000000_deadbeef/src/MyToken.sol")
 
 	setPropertyExample(schemas, "LabelOverride", "account", "0x0000000000000000000000000000000000000001")
 	setPropertyExample(schemas, "LabelOverride", "label", "WETHOwner")
@@ -285,6 +297,19 @@ func addOpenAPIOperations(spec *openapi3.T) {
 		"List recently used Foundry project paths",
 		"ProjectsResponse",
 	))
+	spec.AddOperation("/projects/empty", http.MethodPost, getOperation(
+		"Initialize an empty Foundry project with forge init",
+		"EmptyProjectResponse",
+		withErrorResponse(http.StatusInternalServerError, "ErrorResponse"),
+		withErrorResponse(http.StatusGatewayTimeout, "ErrorResponse"),
+	))
+	projectSourceOp := postOperation(
+		"Write a Solidity source file into an empty project's src folder",
+		"ProjectSourceFileRequest",
+		"ProjectSourceFileResponse",
+	)
+	projectSourceOp.Responses.Set("400", jsonResponse("ErrorResponse", http.StatusText(http.StatusBadRequest)))
+	spec.AddOperation("/projects/source", http.MethodPost, projectSourceOp)
 	spec.AddOperation("/browse/project", http.MethodGet, getOperation(
 		"Open a local folder picker and return a Foundry project path",
 		"BrowseProjectResponse",

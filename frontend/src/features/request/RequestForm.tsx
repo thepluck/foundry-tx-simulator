@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEventHandler, type FormEventHandler } from "react";
-import { browseProject } from "../../api/client";
+import { addProjectSourceFile, browseProject, createEmptyProject } from "../../api/client";
 import type { FormState, HealthStatus, RequestTab, ThemeMode, UpdateForm } from "../../app/form";
 import ProjectHistoryDropdown from "./ProjectHistoryDropdown";
 import ScriptOverridesTab from "./ScriptOverridesTab";
@@ -59,7 +59,12 @@ export default function RequestForm(props: RequestFormProps) {
     onUpdate
   } = props;
   const [browseError, setBrowseError] = useState("");
+  const [projectActionStatus, setProjectActionStatus] = useState("");
+  const [sourceFilePath, setSourceFilePath] = useState("Contract.sol");
+  const [sourceFileText, setSourceFileText] = useState("");
   const [isBrowsingProject, setIsBrowsingProject] = useState(false);
+  const [isCreatingEmptyProject, setIsCreatingEmptyProject] = useState(false);
+  const [isAddingSourceFile, setIsAddingSourceFile] = useState(false);
   const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
   const [isImportPanelOpen, setIsImportPanelOpen] = useState(false);
   const [isPasteImportOpen, setIsPasteImportOpen] = useState(false);
@@ -81,6 +86,7 @@ export default function RequestForm(props: RequestFormProps) {
 
   const handleBrowseProject = async () => {
     setBrowseError("");
+    setProjectActionStatus("");
     setIsBrowsingProject(true);
     try {
       const path = await browseProject(form.apiUrl);
@@ -90,6 +96,40 @@ export default function RequestForm(props: RequestFormProps) {
       setBrowseError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsBrowsingProject(false);
+    }
+  };
+
+  const handleCreateEmptyProject = async () => {
+    setBrowseError("");
+    setProjectActionStatus("");
+    setIsCreatingEmptyProject(true);
+    try {
+      const path = await createEmptyProject(form.apiUrl);
+      onUpdate("projectPath", path);
+      onProjectBrowsed(path);
+      setProjectActionStatus(`Created ${path}`);
+    } catch (err) {
+      setBrowseError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsCreatingEmptyProject(false);
+    }
+  };
+
+  const handleAddSourceFile = async () => {
+    setBrowseError("");
+    setProjectActionStatus("");
+    setIsAddingSourceFile(true);
+    try {
+      const path = await addProjectSourceFile(form.apiUrl, {
+        projectPath: form.projectPath,
+        path: sourceFilePath,
+        source: sourceFileText
+      });
+      setProjectActionStatus(`Added ${path}`);
+    } catch (err) {
+      setBrowseError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsAddingSourceFile(false);
     }
   };
 
@@ -322,8 +362,37 @@ export default function RequestForm(props: RequestFormProps) {
                 <button className="browse-button" type="button" disabled={isBrowsingProject} onClick={handleBrowseProject}>
                   {isBrowsingProject ? "Choosing..." : "Browse"}
                 </button>
+                <button className="browse-button" type="button" disabled={isCreatingEmptyProject} onClick={handleCreateEmptyProject}>
+                  {isCreatingEmptyProject ? "Creating..." : "New Empty"}
+                </button>
               </span>
               {browseError && <span className="field-error">{browseError}</span>}
+              {projectActionStatus && <span className="field-status">{projectActionStatus}</span>}
+            </div>
+
+            <div className="source-file-panel">
+              <label>
+                Source File
+                <input value={sourceFilePath} placeholder="Contract.sol" onChange={(event) => setSourceFilePath(event.target.value)} />
+              </label>
+              <label>
+                Source
+                <textarea
+                  value={sourceFileText}
+                  rows={8}
+                  spellCheck={false}
+                  placeholder={"// SPDX-License-Identifier: UNLICENSED\npragma solidity ^0.8.0;"}
+                  onChange={(event) => setSourceFileText(event.target.value)}
+                />
+              </label>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={isAddingSourceFile || !form.projectPath.trim()}
+                onClick={handleAddSourceFile}
+              >
+                {isAddingSourceFile ? "Adding..." : "Add Source"}
+              </button>
             </div>
 
             <label>
