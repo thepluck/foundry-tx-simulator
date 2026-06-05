@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"foundry-tx-simulator/backend/internal/config"
+	"foundry-tx-simulator/backend/internal/forge"
 	"foundry-tx-simulator/backend/internal/model"
 	"foundry-tx-simulator/backend/internal/projectcache"
 	"foundry-tx-simulator/backend/internal/simulation"
@@ -57,6 +58,8 @@ func (s *Server) Routes() http.Handler {
 	router.Get("/health", s.handleHealth)
 	router.Get("/chains", s.handleChains)
 	router.Get("/projects", s.handleProjects)
+	router.Post("/projects/empty", s.handleCreateEmptyProject)
+	router.Post("/projects/source", s.handleProjectSourceFile)
 	router.Get("/browse/project", s.handleBrowseProject)
 	router.Get("/requests/{id}", s.handleRequestRecord)
 	router.Post("/simulation", s.handleSimulation)
@@ -118,6 +121,53 @@ func (s *Server) handleBrowseProject(w http.ResponseWriter, r *http.Request) {
 	}
 	s.rememberProjectPath(path)
 	writeJSON(w, http.StatusOK, model.BrowseProjectResponse{Path: path})
+}
+
+func (s *Server) handleCreateEmptyProject(w http.ResponseWriter, r *http.Request) {
+	path, result, err := s.simulator.CreateEmptyProject(r.Context())
+	slog.Info(
+		"empty project init completed",
+		"path", path,
+		"exit_code", result.ExitCode,
+		"duration_ms", result.DurationMillis,
+		"stdout_bytes", len(result.Stdout),
+		"stderr_bytes", len(result.Stderr),
+		"error", err,
+	)
+	if err != nil {
+		status := forge.StatusFromCommandError(result.Err)
+		if result.Err == nil {
+			status = http.StatusInternalServerError
+		}
+		writeJSON(w, status, model.ErrorResponse{Error: "create empty project: " + err.Error()})
+		return
+	}
+	s.rememberProjectPath(path)
+	writeJSON(w, http.StatusOK, model.EmptyProjectResponse{Path: path})
+}
+
+func (s *Server) handleProjectSourceFile(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := r.Body.Close(); err != nil {
+			slog.Warn("close request body", "error", err)
+		}
+	}()
+
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20))
+	decoder.DisallowUnknownFields()
+
+	var req model.ProjectSourceFileRequest
+	if err := decoder.Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, model.ErrorResponse{Error: "invalid JSON body: " + err.Error()})
+		return
+	}
+
+	path, err := s.simulator.AddProjectSourceFile(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, model.ErrorResponse{Error: "add project source file: " + err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, model.ProjectSourceFileResponse{Path: path})
 }
 
 func (s *Server) handleRequestRecord(w http.ResponseWriter, r *http.Request) {

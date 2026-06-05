@@ -534,6 +534,103 @@ func TestPrepareFoundryExecutionUsesContentBasedTestCopyWithReferenceCount(t *te
 	}
 }
 
+func TestCreateEmptyProjectInitializesFoundryProjectAndClearsDefaultSources(t *testing.T) {
+	emptyRoot := filepath.Join(t.TempDir(), "empty-projects")
+	service := NewService(config.Config{
+		WorkDir:          t.TempDir(),
+		EmptyProjectRoot: emptyRoot,
+		TimeoutSeconds:   30,
+		MaxConcurrent:    1,
+		RPCURLs: map[string]string{
+			"mainnet": "http://127.0.0.1:8545",
+		},
+	})
+	t.Cleanup(service.Close)
+	fake := &fakeForgeRunner{
+		results: []forge.Result{{Stdout: "initialized\n"}},
+	}
+	service.forge = fake
+
+	projectRoot, result, err := service.CreateEmptyProject(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Stdout != "initialized\n" {
+		t.Fatalf("init result = %#v", result)
+	}
+	if !hasArgSequence(fake.calls[0], "init", projectRoot, "--no-git") {
+		t.Fatalf("unexpected forge init args: %#v", fake.calls)
+	}
+	if !pathInsideRoot(emptyRoot, projectRoot) {
+		t.Fatalf("project root %q is not inside %q", projectRoot, emptyRoot)
+	}
+	for _, dir := range []string{"src", "test", "script"} {
+		entries, err := os.ReadDir(filepath.Join(projectRoot, dir))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 0 {
+			t.Fatalf("%s should be empty after init reset, got %#v", dir, entries)
+		}
+	}
+}
+
+func TestAddProjectSourceFileWritesOnlyInsideEmptyProjectSrc(t *testing.T) {
+	emptyRoot := t.TempDir()
+	projectRoot := filepath.Join(emptyRoot, "project")
+	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(config.Config{
+		RepoRoot:         t.TempDir(),
+		WorkDir:          t.TempDir(),
+		EmptyProjectRoot: emptyRoot,
+		TimeoutSeconds:   30,
+		MaxConcurrent:    1,
+		RPCURLs: map[string]string{
+			"mainnet": "http://127.0.0.1:8545",
+		},
+	})
+	t.Cleanup(service.Close)
+
+	sourcePath, err := service.AddProjectSourceFile(model.ProjectSourceFileRequest{
+		ProjectPath: projectRoot,
+		Path:        "tokens/MyToken.sol",
+		Source:      "pragma solidity ^0.8.0; contract MyToken {}",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPath := filepath.Join(projectRoot, "src", "tokens", "MyToken.sol")
+	if sourcePath != wantPath {
+		t.Fatalf("source path = %q, want %q", sourcePath, wantPath)
+	}
+	source, err := os.ReadFile(wantPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(source) != "pragma solidity ^0.8.0; contract MyToken {}" {
+		t.Fatalf("source = %q", source)
+	}
+
+	if _, err := service.AddProjectSourceFile(model.ProjectSourceFileRequest{
+		ProjectPath: projectRoot,
+		Path:        "../Escape.sol",
+		Source:      "pragma solidity ^0.8.0;",
+	}); err == nil {
+		t.Fatal("expected path traversal to fail")
+	}
+
+	outsideProject := t.TempDir()
+	if _, err := service.AddProjectSourceFile(model.ProjectSourceFileRequest{
+		ProjectPath: outsideProject,
+		Path:        "Outside.sol",
+		Source:      "pragma solidity ^0.8.0;",
+	}); err == nil {
+		t.Fatal("expected project outside empty root to fail")
+	}
+}
+
 func TestSimulatePersistsRequestRecord(t *testing.T) {
 	repoRoot := t.TempDir()
 	writeSimulationTestHarness(t, repoRoot)

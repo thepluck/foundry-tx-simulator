@@ -141,7 +141,7 @@ button:focus-visible {
 
 .browse-field {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 8px;
 }
 
@@ -281,6 +281,26 @@ button:focus-visible {
   color: var(--danger);
   font-size: 13px;
   font-weight: 650;
+}
+
+.field-status {
+  color: var(--ok);
+  font-size: 13px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.source-file-panel {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-low);
+  padding: 10px;
+}
+
+.source-file-panel .secondary-button {
+  justify-self: end;
 }
 
 .two-col,

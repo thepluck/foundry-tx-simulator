@@ -83,6 +83,7 @@ App settings are read from YAML config. `config.yml` is the local config, and `c
 listen_addr: "127.0.0.1:8080"
 frontend_port: 5173
 work_dir: "backend/.runs"
+empty_project_root: "backend/.runs/empty-projects"
 forge_bin: "forge-kyber"
 cast_bin: "cast-kyber"
 anvil_bin: "anvil-kyber"
@@ -118,7 +119,7 @@ rpc_urls:
   mainnet: "${MAINNET_RPC_URL}"
 ```
 
-Use YAML fields such as `listen_addr`, `frontend_port`, `work_dir`, `max_concurrent_runs`, `anvil_port_start`, `rpc_urls`, `explorer_urls`, and `etherscan_api_key` for backend and `./dev.sh` settings. Runtime-only environment variables such as `COINGECKO_API_KEY` are still read directly by the code that needs them. `TXSIM_API_URL` is still available when running the frontend directly and the browser should call a specific backend URL.
+Use YAML fields such as `listen_addr`, `frontend_port`, `work_dir`, `empty_project_root`, `max_concurrent_runs`, `anvil_port_start`, `rpc_urls`, `explorer_urls`, and `etherscan_api_key` for backend and `./dev.sh` settings. Runtime-only environment variables such as `COINGECKO_API_KEY` are still read directly by the code that needs them. `TXSIM_API_URL` is still available when running the frontend directly and the browser should call a specific backend URL.
 
 Keep local `forge_bin` set to `forge-kyber`, `cast_bin` set to `cast-kyber`,
 and `anvil_bin` set to `anvil-kyber`. Set request field `decodeInternal` to
@@ -132,7 +133,7 @@ For local deployment without Docker:
 (cd frontend && TXSIM_API_URL=http://127.0.0.1:8080 yarn dev)
 ```
 
-Local deployment stores saved simulation records in `backend/.runs/records.sqlite` and recently used Foundry project paths in `backend/.runs/projects.json` by default.
+Local deployment stores saved simulation records in `backend/.runs/records.sqlite`, recently used Foundry project paths in `backend/.runs/projects.json`, and generated empty Foundry projects in `backend/.runs/empty-projects` by default.
 
 ## Docker Run
 
@@ -148,7 +149,7 @@ Then open:
 - Backend: `http://127.0.0.1:8080`
 - Swagger UI: `http://127.0.0.1:8080/docs`
 
-Docker stores recently used Foundry project paths in the `backend-runs` volume at `/data/runs/projects.json`, so project suggestions survive container rebuilds.
+Docker stores recently used Foundry project paths in the `backend-runs` volume at `/data/runs/projects.json`, so project suggestions survive container rebuilds. Empty Foundry projects created from the UI live in the separate `empty-projects` volume at `/data/empty-projects`.
 The backend image installs the pinned Kyber Foundry release and runs as
 `linux/amd64`, matching the release's published Linux archive.
 
@@ -160,20 +161,7 @@ TXSIM_BACKEND_PORT=18080 TXSIM_FRONTEND_PORT=15173 docker compose up --build
 
 The frontend container uses `TXSIM_BACKEND_PORT` to generate its browser runtime config, so the default API URL follows the published backend port. Set `TXSIM_API_URL` if the browser should call a different backend URL.
 
-For external Foundry projects, Docker mounts the parent directory of this repo by default:
-
-```text
-.. -> /workspace/projects
-```
-
-That means a sibling project such as `~/Kyber/ks-dex-aggregator-sc` can still be entered in the UI as usual, and the backend will resolve it to `/workspace/projects/ks-dex-aggregator-sc` inside the container. If your projects live somewhere else, set:
-
-```sh
-TXSIM_PROJECTS_HOST_PATH=~/Kyber
-TXSIM_PROJECTS_CONTAINER_PATH=/workspace/projects
-```
-
-The backend expands `~` in `projectPath` and `project_roots`. Docker Compose also resolves `~` in `TXSIM_PROJECTS_HOST_PATH`. The native folder picker remains a local macOS backend feature and is not available inside the Linux container, so Docker users should type or paste the project path.
+Docker no longer bind-mounts host project folders. Use New Empty in the UI to initialize a Foundry project with `forge init`, then Add Source to write Solidity files into that project's `src/` folder. The native folder picker remains a local macOS backend feature and is not available inside the Linux container.
 
 ## Release
 

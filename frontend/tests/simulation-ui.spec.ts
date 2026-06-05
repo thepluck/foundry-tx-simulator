@@ -121,6 +121,67 @@ test("replays a transaction through the tx endpoint", async ({ page }) => {
   expect(simulationCalls).toBe(0);
 });
 
+test("creates an empty project and adds source outside the simulation request", async ({ page }) => {
+  await routeBaseEndpoints(page);
+  const emptyProjectPath = "/data/empty-projects/browser-empty";
+  await page.route(`${apiURL}/projects/empty`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ path: emptyProjectPath })
+    });
+  });
+  await page.route(`${apiURL}/projects/source`, async (route) => {
+    const request = route.request().postDataJSON() as {
+      projectPath?: string;
+      path?: string;
+      source?: string;
+    };
+    expect(request).toMatchObject({
+      projectPath: emptyProjectPath,
+      path: "Token.sol",
+      source: "pragma solidity ^0.8.0; contract Token {}"
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ path: `${emptyProjectPath}/src/Token.sol` })
+    });
+  });
+  await page.route(`${apiURL}/simulation`, async (route) => {
+    const request = route.request().postDataJSON() as {
+      projectPath?: string;
+      projectSourceFiles?: unknown;
+      blockNumber?: string;
+      sender?: string;
+      target?: string;
+      data?: string;
+    };
+    expect(request.projectPath).toBe(emptyProjectPath);
+    expect(request.projectSourceFiles).toBeUndefined();
+    expect(JSON.stringify(request)).not.toContain("contract Token");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ...simulateResponse(), id: "empty-project-run" })
+    });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "New Empty" }).click();
+  await expect(page.getByLabel("Foundry Project")).toHaveValue(emptyProjectPath);
+  await page.getByLabel("Source File").fill("Token.sol");
+  await page.getByLabel("Source", { exact: true }).fill("pragma solidity ^0.8.0; contract Token {}");
+  await page.getByRole("button", { name: "Add Source" }).click();
+  await expect(page.getByText(`${emptyProjectPath}/src/Token.sol`)).toBeVisible();
+  await page.getByLabel("Block").fill("23000000");
+  await page.getByLabel("Sender").fill(spender);
+  await page.getByLabel("Target").fill(token);
+  await page.getByLabel("Calldata").fill("0x23b872dd");
+  await page.getByRole("button", { name: "Run Simulation" }).click();
+  await expect(page.getByText("success | 12ms | exit 0 | empty-project-run")).toBeVisible();
+});
+
 test("exports and imports simulation input and output", async ({ page }, testInfo) => {
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://127.0.0.1:5173" });
   await routeBaseEndpoints(page);

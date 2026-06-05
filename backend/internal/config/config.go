@@ -19,6 +19,7 @@ type Config struct {
 	RepoRoot         string            `mapstructure:"repo_root"`
 	ProjectRoots     []string          `mapstructure:"project_roots"`
 	WorkDir          string            `mapstructure:"work_dir"`
+	EmptyProjectRoot string            `mapstructure:"empty_project_root"`
 	ProjectCachePath string            `mapstructure:"project_cache_path"`
 	TimeoutSeconds   int               `mapstructure:"timeout_seconds"`
 	MaxConcurrent    int               `mapstructure:"max_concurrent_runs"`
@@ -97,6 +98,14 @@ func LoadFile(path string) (Config, string, error) {
 		cfg.ProjectCachePath = filepath.Join(cfg.WorkDir, "projects.json")
 	} else {
 		cfg.ProjectCachePath, err = normalizeConfigPath(configDir, cfg.ProjectCachePath)
+		if err != nil {
+			return Config{}, "", err
+		}
+	}
+	if cfg.EmptyProjectRoot == "" {
+		cfg.EmptyProjectRoot = filepath.Join(cfg.WorkDir, "empty-projects")
+	} else {
+		cfg.EmptyProjectRoot, err = normalizeConfigPath(configDir, cfg.EmptyProjectRoot)
 		if err != nil {
 			return Config{}, "", err
 		}
