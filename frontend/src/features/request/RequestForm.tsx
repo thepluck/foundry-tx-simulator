@@ -62,6 +62,7 @@ export default function RequestForm(props: RequestFormProps) {
   const [projectActionStatus, setProjectActionStatus] = useState("");
   const [sourceFilePath, setSourceFilePath] = useState("Contract.sol");
   const [sourceFileText, setSourceFileText] = useState("");
+  const [defaultProjectPath, setDefaultProjectPath] = useState("");
   const [isBrowsingProject, setIsBrowsingProject] = useState(false);
   const [isAddingSourceFile, setIsAddingSourceFile] = useState(false);
   const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
@@ -72,6 +73,9 @@ export default function RequestForm(props: RequestFormProps) {
   const isRequestLookupDisabled = isRunning || isOpeningRequest || !requestLookupId.trim();
   const isImportExportDisabled = isRunning || isOpeningRequest;
   const isTxRequest = form.requestKind === "tx";
+  const selectedProjectPath = form.projectPath.trim();
+  const isDefaultProjectSelected = selectedProjectPath === "" || (defaultProjectPath !== "" && selectedProjectPath === defaultProjectPath);
+  const isSourceFileDisabled = isAddingSourceFile || !isDefaultProjectSelected;
 
   const handleImportChange: ChangeEventHandler<HTMLInputElement> = (event) => {
     const file = event.currentTarget.files?.[0];
@@ -98,7 +102,19 @@ export default function RequestForm(props: RequestFormProps) {
     }
   };
 
+  const handleSelectDefaultProject = () => {
+    setBrowseError("");
+    setProjectActionStatus("");
+    onUpdate("projectPath", defaultProjectPath);
+    if (defaultProjectPath) {
+      onProjectBrowsed(defaultProjectPath);
+    }
+  };
+
   const handleAddSourceFile = async () => {
+    if (!isDefaultProjectSelected) {
+      return;
+    }
     setBrowseError("");
     setProjectActionStatus("");
     setIsAddingSourceFile(true);
@@ -107,6 +123,7 @@ export default function RequestForm(props: RequestFormProps) {
         path: sourceFilePath,
         source: sourceFileText
       });
+      setDefaultProjectPath(result.projectPath);
       onUpdate("projectPath", result.projectPath);
       onProjectBrowsed(result.projectPath);
       setProjectActionStatus(`Added ${result.path}`);
@@ -355,6 +372,9 @@ export default function RequestForm(props: RequestFormProps) {
                   onChange={(event) => onUpdate("projectPath", event.target.value)}
                 />
                 <ProjectHistoryDropdown projects={projectSuggestions} onSelect={(path) => onUpdate("projectPath", path)} />
+                <button className="browse-button" type="button" onClick={handleSelectDefaultProject}>
+                  Default
+                </button>
                 <button className="browse-button" type="button" disabled={isBrowsingProject} onClick={handleBrowseProject}>
                   {isBrowsingProject ? "Choosing..." : "Browse"}
                 </button>
@@ -366,7 +386,12 @@ export default function RequestForm(props: RequestFormProps) {
             <div className="source-file-panel">
               <label>
                 Source File
-                <input value={sourceFilePath} placeholder="Contract.sol" onChange={(event) => setSourceFilePath(event.target.value)} />
+                <input
+                  value={sourceFilePath}
+                  placeholder="Contract.sol"
+                  disabled={isSourceFileDisabled}
+                  onChange={(event) => setSourceFilePath(event.target.value)}
+                />
               </label>
               <label>
                 Source
@@ -374,6 +399,7 @@ export default function RequestForm(props: RequestFormProps) {
                   value={sourceFileText}
                   rows={8}
                   spellCheck={false}
+                  disabled={isSourceFileDisabled}
                   placeholder={"// SPDX-License-Identifier: UNLICENSED\npragma solidity ^0.8.0;"}
                   onChange={(event) => setSourceFileText(event.target.value)}
                 />
@@ -381,7 +407,7 @@ export default function RequestForm(props: RequestFormProps) {
               <button
                 className="secondary-button"
                 type="button"
-                disabled={isAddingSourceFile}
+                disabled={isSourceFileDisabled}
                 onClick={handleAddSourceFile}
               >
                 {isAddingSourceFile ? "Adding..." : "Add Source"}
