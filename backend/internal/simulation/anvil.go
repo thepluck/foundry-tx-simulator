@@ -3,9 +3,7 @@ package simulation
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -14,6 +12,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/rpc"
 
 	"foundry-tx-simulator/backend/internal/model"
 )
@@ -26,10 +27,11 @@ const (
 )
 
 type anvilInstance struct {
-	bin    string
-	host   string
-	port   int
-	client *http.Client
+	bin       string
+	host      string
+	port      int
+	client    *http.Client
+	rpcClient *rpc.Client
 
 	mu      sync.Mutex
 	cmd     *exec.Cmd
@@ -131,7 +133,8 @@ func (a *anvilInstance) resetLocked(ctx context.Context, rpcURL string, blockNum
 			},
 		},
 	}
-	if _, err := a.callRPC(ctx, "anvil_reset", params); err != nil {
+	var reset bool
+	if err := a.callRPC(ctx, &reset, "anvil_reset", params...); err != nil {
 		return fmt.Errorf("reset anvil fork: %w", err)
 	}
 	return nil
@@ -145,7 +148,8 @@ func (a *anvilInstance) waitReady(ctx context.Context) error {
 		if err, ok := a.processExitedLocked(); ok {
 			return a.anvilExitError(err)
 		}
-		if _, err := a.callRPC(ctx, "eth_chainId", []any{}); err == nil {
+		var chainID hexutil.Uint64
+		if err := a.callRPC(ctx, &chainID, "eth_chainId"); err == nil {
 			if err, ok := a.processExitedLocked(); ok {
 				return a.anvilExitError(err)
 			}
@@ -179,49 +183,24 @@ func (a *anvilInstance) ensurePortAvailable() error {
 	return listener.Close()
 }
 
-func (a *anvilInstance) callRPC(ctx context.Context, method string, params any) (json.RawMessage, error) {
-	body, err := json.Marshal(map[string]any{
-		"jsonrpc": "2.0",
-		"id":      1,
-		"method":  method,
-		"params":  params,
-	})
+func (a *anvilInstance) callRPC(ctx context.Context, result any, method string, params ...any) error {
+	client, err := a.rpcClientLocked(ctx)
+	if err != nil {
+		return err
+	}
+	return client.CallContext(ctx, result, method, params...)
+}
+
+func (a *anvilInstance) rpcClientLocked(ctx context.Context) (*rpc.Client, error) {
+	if a.rpcClient != nil {
+		return a.rpcClient, nil
+	}
+	client, err := rpc.DialOptions(ctx, a.rpcURL(), rpc.WithHTTPClient(a.client))
 	if err != nil {
 		return nil, err
 	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.rpcURL(), bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
-	}()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("http status %d", resp.StatusCode)
-	}
-
-	var rpcResp struct {
-		Result json.RawMessage `json:"result"`
-		Error  *struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
-		return nil, err
-	}
-	if rpcResp.Error != nil {
-		return nil, fmt.Errorf("rpc error %d: %s", rpcResp.Error.Code, rpcResp.Error.Message)
-	}
-	return rpcResp.Result, nil
+	a.rpcClient = client
+	return client, nil
 }
 
 func (a *anvilInstance) runningLocked() bool {
@@ -256,6 +235,10 @@ func (a *anvilInstance) recordProcessExitLocked(err error) {
 }
 
 func (a *anvilInstance) stopLocked() {
+	if a.rpcClient != nil {
+		a.rpcClient.Close()
+		a.rpcClient = nil
+	}
 	if a.cmd != nil && a.cmd.Process != nil && a.runningLocked() {
 		slog.Info("anvil stop started", "anvil_rpc", a.rpcURL(), "port", a.port)
 		_ = a.cmd.Process.Kill()

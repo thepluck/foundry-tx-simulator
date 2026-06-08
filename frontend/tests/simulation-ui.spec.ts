@@ -43,6 +43,29 @@ test("shows validation errors for malformed simulation inputs", async ({ page })
   expect(simulateCalls).toBe(0);
 });
 
+test("requires a block number unless latest block is enabled", async ({ page }) => {
+  await routeBaseEndpoints(page);
+  let simulateCalls = 0;
+  await page.route(`${apiURL}/simulation`, async (route) => {
+    simulateCalls += 1;
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "simulate should not be called" })
+    });
+  });
+
+  await page.goto("/");
+  await page.getByLabel("Sender").fill(spender);
+  await page.getByLabel("Target").fill(token);
+  await page.getByLabel("Calldata").fill("0x");
+
+  await page.getByRole("button", { name: "Run Simulation" }).click();
+
+  await expect(page.locator(".error-box")).toContainText("blockNumber is required unless latest block is enabled");
+  expect(simulateCalls).toBe(0);
+});
+
 test("changes the running action to abort and cancels the active request", async ({ page }) => {
   await routeBaseEndpoints(page);
   await page.route(`${apiURL}/simulation`, async (route) => {
@@ -262,6 +285,61 @@ test("exports and imports simulation input and output", async ({ page }, testInf
   const invalidFileChooser = await invalidFileChooserPromise;
   await invalidFileChooser.setFiles(invalidImportPath);
   await expect(page.locator(".error-box")).toContainText("import validation failed:");
+});
+
+test("exports the backend-normalized latest block request", async ({ page }) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://127.0.0.1:5173" });
+  await routeBaseEndpoints(page);
+  const response = { ...simulateResponse(), id: "latest-run" };
+  await page.route(`${apiURL}/simulation`, async (route) => {
+    const request = route.request().postDataJSON() as {
+      blockNumber?: string;
+      sender?: string;
+      target?: string;
+      data?: string;
+    };
+    expect(request.blockNumber).toBe("");
+    expect(request.sender).toBe(spender);
+    expect(request.target).toBe(token);
+    expect(request.data).toBe("0x");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(response)
+    });
+  });
+  await page.route(`${apiURL}/requests/latest-run`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "latest-run",
+        kind: "simulation",
+        request: {
+          chain: "mainnet",
+          blockNumber: "23000042",
+          sender: spender,
+          target: token,
+          data: "0x",
+          decodeInternal: false
+        },
+        response
+      })
+    });
+  });
+
+  await page.goto("/");
+  await page.getByLabel("latest").check();
+  await page.getByLabel("Sender").fill(spender);
+  await page.getByLabel("Target").fill(token);
+  await page.getByLabel("Calldata").fill("0x");
+  await page.getByRole("button", { name: "Run Simulation" }).click();
+  await expect(page.getByText("success | 12ms | exit 0 | latest-run")).toBeVisible();
+
+  await page.getByRole("button", { name: "Export" }).click();
+  await page.getByRole("dialog", { name: "Export simulation data" }).getByRole("button", { name: "Copy simulation data to clipboard" }).click();
+  const exported = JSON.parse(await page.evaluate(() => navigator.clipboard.readText()));
+  expect(exported.request.blockNumber).toBe("23000042");
 });
 
 test("uses configured explorer links and renders only the last main call subtree", async ({ page }) => {

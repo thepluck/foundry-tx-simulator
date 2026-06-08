@@ -1,14 +1,13 @@
 package prices
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
-	"encoding/json"
-	"fmt"
 	"math/big"
 	"net/http"
 	"strings"
+
+	"github.com/ethereum/go-ethereum/rpc"
 
 	"foundry-tx-simulator/backend/internal/fundflow"
 )
@@ -34,15 +33,20 @@ func (p RPCMetadataProvider) Fetch(ctx context.Context, chain string, tokens []s
 	}
 
 	out := make(map[string]fundflow.TokenPrice)
-	client := defaultHTTPClient(p.Client)
+	rpcClient, err := rpc.DialOptions(ctx, rpcURL, rpc.WithHTTPClient(defaultHTTPClient(p.Client)))
+	if err == nil {
+		defer rpcClient.Close()
+	}
 	for _, token := range tokens {
 		metadata := fundflow.TokenPrice{LogoURL: trustWalletLogoURL(chain, token)}
-		if decimals, ok := p.fetchDecimals(ctx, client, rpcURL, token); ok {
-			metadata.Decimals = decimals
-			metadata.HasDecimals = true
-		}
-		if symbol, ok := p.fetchSymbol(ctx, client, rpcURL, token); ok {
-			metadata.Symbol = symbol
+		if rpcClient != nil {
+			if decimals, ok := p.fetchDecimals(ctx, rpcClient, token); ok {
+				metadata.Decimals = decimals
+				metadata.HasDecimals = true
+			}
+			if symbol, ok := p.fetchSymbol(ctx, rpcClient, token); ok {
+				metadata.Symbol = symbol
+			}
 		}
 		if metadata.HasDecimals || metadata.Symbol != "" || metadata.LogoURL != "" {
 			out[token] = metadata
@@ -51,70 +55,29 @@ func (p RPCMetadataProvider) Fetch(ctx context.Context, chain string, tokens []s
 	return out, nil
 }
 
-func (p RPCMetadataProvider) fetchDecimals(ctx context.Context, client *http.Client, rpcURL string, token string) (int, bool) {
-	result, err := ethCall(ctx, client, rpcURL, token, erc20DecimalsSelector)
+func (p RPCMetadataProvider) fetchDecimals(ctx context.Context, client *rpc.Client, token string) (int, bool) {
+	result, err := ethCall(ctx, client, token, erc20DecimalsSelector)
 	if err != nil {
 		return 0, false
 	}
 	return parseUintResult(result)
 }
 
-func (p RPCMetadataProvider) fetchSymbol(ctx context.Context, client *http.Client, rpcURL string, token string) (string, bool) {
-	result, err := ethCall(ctx, client, rpcURL, token, erc20SymbolSelector)
+func (p RPCMetadataProvider) fetchSymbol(ctx context.Context, client *rpc.Client, token string) (string, bool) {
+	result, err := ethCall(ctx, client, token, erc20SymbolSelector)
 	if err != nil {
 		return "", false
 	}
 	return parseStringResult(result)
 }
 
-func ethCall(ctx context.Context, client *http.Client, rpcURL string, to string, data string) (string, error) {
-	body, err := json.Marshal(map[string]any{
-		"jsonrpc": "2.0",
-		"id":      1,
-		"method":  "eth_call",
-		"params": []any{
-			map[string]string{
-				"to":   to,
-				"data": data,
-			},
-			"latest",
-		},
-	})
-	if err != nil {
-		return "", err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rpcURL, bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("rpc metadata request failed: %s", resp.Status)
-	}
-
-	var payload struct {
-		Result string `json:"result"`
-		Error  *struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return "", err
-	}
-	if payload.Error != nil {
-		return "", fmt.Errorf("rpc metadata call failed: %d %s", payload.Error.Code, payload.Error.Message)
-	}
-	return payload.Result, nil
+func ethCall(ctx context.Context, client *rpc.Client, to string, data string) (string, error) {
+	var result string
+	err := client.CallContext(ctx, &result, "eth_call", map[string]string{
+		"to":   to,
+		"data": data,
+	}, "latest")
+	return result, err
 }
 
 func parseUintResult(value string) (int, bool) {
