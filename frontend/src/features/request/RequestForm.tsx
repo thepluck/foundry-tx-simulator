@@ -389,7 +389,7 @@ export default function RequestForm(props: RequestFormProps) {
                 <input
                   value={sourceFilePath}
                   placeholder="Contract.sol"
-                  disabled={!isDefaultProjectSelected}
+                  disabled={isSourceFileDisabled}
                   onChange={(event) => setSourceFilePath(event.target.value)}
                 />
               </label>
@@ -399,7 +399,7 @@ export default function RequestForm(props: RequestFormProps) {
                   value={sourceFileText}
                   rows={8}
                   spellCheck={false}
-                  disabled={!isDefaultProjectSelected}
+                  disabled={isSourceFileDisabled}
                   placeholder={"// SPDX-License-Identifier: UNLICENSED\npragma solidity ^0.8.0;"}
                   onChange={(event) => setSourceFileText(event.target.value)}
                 />

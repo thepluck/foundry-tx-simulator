@@ -147,6 +147,14 @@ test("replays a transaction through the tx endpoint", async ({ page }) => {
 test("adds source to the default project outside the simulation request", async ({ page }) => {
   await routeBaseEndpoints(page);
   const defaultProjectPath = "/data/default-project";
+  let markAddSourceStarted = () => {};
+  const addSourceStarted = new Promise<void>((resolve) => {
+    markAddSourceStarted = resolve;
+  });
+  let finishAddSource = () => {};
+  const finishAddSourceRequest = new Promise<void>((resolve) => {
+    finishAddSource = resolve;
+  });
   await page.route(`${apiURL}/projects/default/source`, async (route) => {
     const request = route.request().postDataJSON() as {
       projectPath?: string;
@@ -158,6 +166,8 @@ test("adds source to the default project outside the simulation request", async 
       source: "pragma solidity ^0.8.0; contract Token {}"
     });
     expect(request.projectPath).toBeUndefined();
+    markAddSourceStarted();
+    await finishAddSourceRequest;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -188,6 +198,11 @@ test("adds source to the default project outside the simulation request", async 
   await page.getByLabel("Source File").fill("Token.sol");
   await page.getByLabel("Source", { exact: true }).fill("pragma solidity ^0.8.0; contract Token {}");
   await page.getByRole("button", { name: "Add Source" }).click();
+  await addSourceStarted;
+  await expect(page.getByLabel("Source File")).toBeDisabled();
+  await expect(page.getByRole("textbox", { name: "Source", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Adding..." })).toBeDisabled();
+  finishAddSource();
   await expect(page.getByLabel("Foundry Project")).toHaveValue(defaultProjectPath);
   await expect(page.getByText(`${defaultProjectPath}/src/Token.sol`)).toBeVisible();
   await page.getByLabel("Block").fill("23000000");
