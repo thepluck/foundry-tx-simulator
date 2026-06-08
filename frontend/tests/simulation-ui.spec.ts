@@ -184,7 +184,7 @@ test("adds source to the default project outside the simulation request", async 
   });
 
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Default Project" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Default" })).toBeVisible();
   await page.getByLabel("Source File").fill("Token.sol");
   await page.getByLabel("Source", { exact: true }).fill("pragma solidity ^0.8.0; contract Token {}");
   await page.getByRole("button", { name: "Add Source" }).click();
@@ -196,6 +196,29 @@ test("adds source to the default project outside the simulation request", async 
   await page.getByLabel("Calldata").fill("0x23b872dd");
   await page.getByRole("button", { name: "Run Simulation" }).click();
   await expect(page.getByText("success | 12ms | exit 0 | default-project-run")).toBeVisible();
+});
+
+test("disables source file actions for custom projects", async ({ page }) => {
+  await routeBaseEndpoints(page);
+  await page.route(`${apiURL}/browse/project`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ path: "/Users/test/custom-project" })
+    });
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Add Source" })).toBeEnabled();
+  await page.getByRole("button", { name: "Browse" }).click();
+  await expect(page.getByLabel("Foundry Project")).toHaveValue("/Users/test/custom-project");
+  await expect(page.getByLabel("Source File")).toBeDisabled();
+  await expect(page.getByLabel("Source", { exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Add Source" })).toBeDisabled();
+
+  await page.getByRole("button", { name: "Default" }).click();
+  await expect(page.getByLabel("Foundry Project")).toHaveValue("");
+  await expect(page.getByRole("button", { name: "Add Source" })).toBeEnabled();
 });
 
 test("exports and imports simulation input and output", async ({ page }, testInfo) => {
