@@ -61,6 +61,16 @@ export const browseProjectResponseSchema = z.object({
   path: z.string().min(1)
 });
 
+export const projectSourceFileRequestSchema = z.object({
+  path: z.string().min(1),
+  source: z.string().min(1)
+});
+
+export const projectSourceFileResponseSchema = z.object({
+  projectPath: z.string().min(1),
+  path: z.string().min(1)
+});
+
 export const errorResponseSchema = z.object({
   error: z.string()
 });
@@ -159,6 +169,8 @@ export type StateOverride = z.infer<typeof stateOverrideSchema>;
 export type CompilerConfig = z.infer<typeof compilerConfigSchema>;
 export type ChainConfig = z.infer<typeof chainConfigSchema>;
 export type ProjectsResponse = z.infer<typeof projectsResponseSchema>;
+export type ProjectSourceFileRequest = z.infer<typeof projectSourceFileRequestSchema>;
+export type ProjectSourceFileResponse = z.infer<typeof projectSourceFileResponseSchema>;
 export type SimulateRequest = z.infer<typeof simulateRequestSchema>;
 export type TxRequest = z.infer<typeof txRequestSchema>;
 export type RequestKind = z.infer<typeof requestKindSchema>;

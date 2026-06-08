@@ -113,6 +113,8 @@ func registerOpenAPISchemas(schemas openapi3.Schemas) error {
 		{"ChainsResponse", model.ChainsResponse{}},
 		{"ProjectsResponse", model.ProjectsResponse{}},
 		{"BrowseProjectResponse", model.BrowseProjectResponse{}},
+		{"ProjectSourceFileRequest", model.ProjectSourceFileRequest{}},
+		{"ProjectSourceFileResponse", model.ProjectSourceFileResponse{}},
 		{"SimulationRecord", model.SimulationRecord{}},
 		{"SimulateRequest", model.SimulateRequest{}},
 		{"TxRequest", model.TxRequest{}},
@@ -242,6 +244,13 @@ func enrichOpenAPISchemas(schemas openapi3.Schemas) {
 	setPropertyDescription(schemas, "ProjectsResponse", "projects", "Most recently used Foundry project paths.")
 	setPropertyDescription(schemas, "BrowseProjectResponse", "path", "Absolute path selected by the local backend folder picker.")
 	setPropertyExample(schemas, "BrowseProjectResponse", "path", "~/foundry-project")
+	setPropertyDescription(schemas, "ProjectSourceFileRequest", "path", "Relative Solidity file path under the default project's src folder.")
+	setPropertyExample(schemas, "ProjectSourceFileRequest", "path", "MyToken.sol")
+	setPropertyDescription(schemas, "ProjectSourceFileRequest", "source", "Solidity source to write.")
+	setPropertyDescription(schemas, "ProjectSourceFileResponse", "projectPath", "Absolute path to the configured default Foundry project.")
+	setPropertyExample(schemas, "ProjectSourceFileResponse", "projectPath", "~/foundry-tx-simulator/backend/.runs/default-project")
+	setPropertyDescription(schemas, "ProjectSourceFileResponse", "path", "Absolute path to the written Solidity source file.")
+	setPropertyExample(schemas, "ProjectSourceFileResponse", "path", "~/foundry-tx-simulator/backend/.runs/default-project/src/MyToken.sol")
 
 	setPropertyExample(schemas, "LabelOverride", "account", "0x0000000000000000000000000000000000000001")
 	setPropertyExample(schemas, "LabelOverride", "label", "WETHOwner")
@@ -292,6 +301,15 @@ func addOpenAPIOperations(spec *openapi3.T) {
 		"List recently used Foundry project paths",
 		"ProjectsResponse",
 	))
+	projectSourceOp := postOperation(
+		"Write a Solidity source file into the default project's src folder",
+		"ProjectSourceFileRequest",
+		"ProjectSourceFileResponse",
+	)
+	projectSourceOp.Responses.Set("400", jsonResponse("ErrorResponse", http.StatusText(http.StatusBadRequest)))
+	projectSourceOp.Responses.Set("500", jsonResponse("ErrorResponse", http.StatusText(http.StatusInternalServerError)))
+	projectSourceOp.Responses.Set("504", jsonResponse("ErrorResponse", http.StatusText(http.StatusGatewayTimeout)))
+	spec.AddOperation("/projects/default/source", http.MethodPost, projectSourceOp)
 	spec.AddOperation("/browse/project", http.MethodGet, getOperation(
 		"Open a local folder picker and return a Foundry project path",
 		"BrowseProjectResponse",

@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"foundry-tx-simulator/backend/internal/config"
+	"foundry-tx-simulator/backend/internal/forge"
 	"foundry-tx-simulator/backend/internal/model"
 	"foundry-tx-simulator/backend/internal/projectcache"
 	"foundry-tx-simulator/backend/internal/simulation"
@@ -57,6 +58,7 @@ func (s *Server) Routes() http.Handler {
 	router.Get("/health", s.handleHealth)
 	router.Get("/chains", s.handleChains)
 	router.Get("/projects", s.handleProjects)
+	router.Post("/projects/default/source", s.handleProjectSourceFile)
 	router.Get("/browse/project", s.handleBrowseProject)
 	router.Get("/requests/{id}", s.handleRequestRecord)
 	router.Post("/simulation", s.handleSimulation)
@@ -118,6 +120,35 @@ func (s *Server) handleBrowseProject(w http.ResponseWriter, r *http.Request) {
 	}
 	s.rememberProjectPath(path)
 	writeJSON(w, http.StatusOK, model.BrowseProjectResponse{Path: path})
+}
+
+func (s *Server) handleProjectSourceFile(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := r.Body.Close(); err != nil {
+			slog.Warn("close request body", "error", err)
+		}
+	}()
+
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20))
+	decoder.DisallowUnknownFields()
+
+	var req model.ProjectSourceFileRequest
+	if err := decoder.Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, model.ErrorResponse{Error: "invalid JSON body: " + err.Error()})
+		return
+	}
+
+	payload, result, err := s.simulator.AddDefaultProjectSourceFile(r.Context(), req)
+	if err != nil {
+		status := http.StatusBadRequest
+		if result.Err != nil {
+			status = forge.StatusFromCommandError(result.Err)
+		}
+		writeJSON(w, status, model.ErrorResponse{Error: "add default project source file: " + err.Error()})
+		return
+	}
+	s.rememberProjectPath(payload.ProjectPath)
+	writeJSON(w, http.StatusOK, payload)
 }
 
 func (s *Server) handleRequestRecord(w http.ResponseWriter, r *http.Request) {

@@ -1,8 +1,8 @@
 listen_addr: "0.0.0.0:8080"
 repo_root: "/app"
-project_roots:
-  - "${TXSIM_PROJECTS_CONTAINER_PATH}"
+project_roots: []
 work_dir: "/data/runs"
+default_project_root: "/data/default-project"
 project_cache_path: "/data/runs/projects.json"
 timeout_seconds: 300
 max_concurrent_runs: 1

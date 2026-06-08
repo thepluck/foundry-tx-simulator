@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -43,6 +44,12 @@ func TestOpenAPIEndpoint(t *testing.T) {
 	if _, ok := paths["/projects"]; !ok {
 		t.Fatalf("missing /projects path: %#v", paths)
 	}
+	if _, ok := paths["/projects/default"]; ok {
+		t.Fatalf("unexpected /projects/default create path: %#v", paths)
+	}
+	if _, ok := paths["/projects/default/source"]; !ok {
+		t.Fatalf("missing /projects/default/source path: %#v", paths)
+	}
 	if _, ok := paths["/requests/{id}"]; !ok {
 		t.Fatalf("missing /requests/{id} path: %#v", paths)
 	}
@@ -70,6 +77,9 @@ func TestOpenAPIEndpoint(t *testing.T) {
 	}
 	if _, ok := properties["etherscanApiKey"]; ok {
 		t.Fatalf("etherscanApiKey should be backend config, not a request property: %#v", properties)
+	}
+	if _, ok := properties["projectSourceFiles"]; ok {
+		t.Fatalf("projectSourceFiles should be managed by /projects/default/source, not /simulation: %#v", properties)
 	}
 	if _, ok := properties["decodeInternal"]; !ok {
 		t.Fatalf("decodeInternal should be a request property: %#v", properties)
@@ -101,6 +111,23 @@ func TestOpenAPIEndpoint(t *testing.T) {
 	}
 	if _, ok := txProperties["quick"]; !ok {
 		t.Fatalf("quick should be a tx request property: %#v", txProperties)
+	}
+	sourceRequest, ok := schemas["ProjectSourceFileRequest"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing ProjectSourceFileRequest schema: %#v", schemas)
+	}
+	sourceProperties, ok := sourceRequest["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing ProjectSourceFileRequest properties: %#v", sourceRequest)
+	}
+	if _, ok := sourceProperties["projectPath"]; ok {
+		t.Fatalf("projectPath should come from the configured default project, not the source request: %#v", sourceProperties)
+	}
+	if _, ok := sourceProperties["path"]; !ok {
+		t.Fatalf("path should be a source request property: %#v", sourceProperties)
+	}
+	if _, ok := sourceProperties["source"]; !ok {
+		t.Fatalf("source should be a source request property: %#v", sourceProperties)
 	}
 }
 
@@ -204,6 +231,63 @@ func TestProjectsEndpoint(t *testing.T) {
 		if projects[i] != want[i] {
 			t.Fatalf("projects = %#v, want %#v", projects, want)
 		}
+	}
+}
+
+func TestProjectSourceFileEndpointWritesIntoDefaultProject(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.DefaultProjectRoot = t.TempDir()
+	if err := os.WriteFile(filepath.Join(cfg.DefaultProjectRoot, "foundry.toml"), []byte("[profile.default]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	server := NewServer(cfg, "")
+	body := strings.NewReader(`{
+  "path": "tokens/MyToken.sol",
+  "source": "pragma solidity ^0.8.0; contract MyToken {}"
+}`)
+	req := httptest.NewRequest(http.MethodPost, "/projects/default/source", body)
+	rec := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var payload model.ProjectSourceFileResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.ProjectPath != cfg.DefaultProjectRoot {
+		t.Fatalf("projectPath = %q, want %q", payload.ProjectPath, cfg.DefaultProjectRoot)
+	}
+	wantPath := filepath.Join(cfg.DefaultProjectRoot, "src", "tokens", "MyToken.sol")
+	if payload.Path != wantPath {
+		t.Fatalf("path = %q, want %q", payload.Path, wantPath)
+	}
+	source, err := os.ReadFile(wantPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(source) != "pragma solidity ^0.8.0; contract MyToken {}" {
+		t.Fatalf("source = %q", source)
+	}
+}
+
+func TestProjectSourceFileEndpointRejectsInvalidSourcePath(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.DefaultProjectRoot = t.TempDir()
+	server := NewServer(cfg, "")
+	body := strings.NewReader(`{
+  "path": "../Outside.sol",
+  "source": "pragma solidity ^0.8.0;"
+}`)
+	req := httptest.NewRequest(http.MethodPost, "/projects/default/source", body)
+	rec := httptest.NewRecorder()
+
+	server.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
 }
 

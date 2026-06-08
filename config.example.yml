@@ -3,6 +3,7 @@ frontend_port: 5173
 repo_root: "."
 project_roots: []
 work_dir: "backend/.runs"
+default_project_root: "backend/.runs/default-project"
 project_cache_path: "backend/.runs/projects.json"
 timeout_seconds: 300
 max_concurrent_runs: 1

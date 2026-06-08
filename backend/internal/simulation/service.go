@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -60,6 +62,8 @@ type Service struct {
 
 	testCopiesMu sync.Mutex
 	testCopies   map[string]int
+
+	defaultProjectMu sync.Mutex
 }
 
 type foundryExecution struct {
@@ -67,6 +71,7 @@ type foundryExecution struct {
 	TestDir       string
 	TestPath      string
 	TestMatchPath string
+	BuildSrc      bool
 	External      bool
 	tempFiles     []string
 	cleanupFuncs  []func()
@@ -182,6 +187,9 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 		return resp, status
 	}
 
+	releaseDefaultProject := s.lockDefaultProjectIfUsed(req.ProjectPath)
+	defer releaseDefaultProject()
+
 	rpcURL, err := s.validateRequest(parent, &req)
 	if err != nil {
 		resp.Error = err.Error()
@@ -245,9 +253,10 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 		"test_path", execution.TestPath,
 		"test_match_path", execution.TestMatchPath,
 		"external_project", execution.External,
+		"build_src", execution.BuildSrc,
 	)
 
-	if execution.External {
+	if execution.BuildSrc {
 		slog.Info("forge build src started", "run_id", runID, "root", execution.Root)
 		buildResult := s.buildProjectSrc(ctx, execution, req.Compiler)
 		logForgeResult(runID, "build project src", buildResult)
@@ -631,6 +640,10 @@ func validateCompilerConfig(config *model.CompilerConfig) error {
 func (s *Service) prepareFoundryExecution(req *model.SimulateRequest, runID string) (foundryExecution, error) {
 	localRoot := filepath.Join(s.cfg.RepoRoot, localFoundryDir)
 	localTestPath := filepath.Join(localRoot, filepath.FromSlash(localSimulationRelPath))
+	source, err := os.ReadFile(localTestPath)
+	if err != nil {
+		return foundryExecution{}, err
+	}
 	if req.ProjectPath == "" {
 		return foundryExecution{
 			Root:          localRoot,
@@ -642,14 +655,10 @@ func (s *Service) prepareFoundryExecution(req *model.SimulateRequest, runID stri
 	execution := foundryExecution{
 		Root:     req.ProjectPath,
 		TestDir:  filepath.Join(req.ProjectPath, "test"),
+		BuildSrc: s.shouldBuildProjectSrc(req.ProjectPath),
 		External: true,
 	}
 	if err := os.MkdirAll(execution.TestDir, 0o755); err != nil {
-		return foundryExecution{}, err
-	}
-
-	source, err := os.ReadFile(localTestPath)
-	if err != nil {
 		return foundryExecution{}, err
 	}
 
@@ -664,6 +673,116 @@ func (s *Service) prepareFoundryExecution(req *model.SimulateRequest, runID stri
 	execution.TestMatchPath = filepath.ToSlash(filepath.Join("test", testName))
 	execution.cleanupFuncs = append(execution.cleanupFuncs, releaseTestCopy)
 	return execution, nil
+}
+
+func (s *Service) AddDefaultProjectSourceFile(ctx context.Context, req model.ProjectSourceFileRequest) (model.ProjectSourceFileResponse, forge.Result, error) {
+	req.Path = strings.TrimSpace(req.Path)
+	if err := validateProjectSourceFileRequest(&req); err != nil {
+		return model.ProjectSourceFileResponse{}, forge.Result{}, err
+	}
+	s.defaultProjectMu.Lock()
+	defer s.defaultProjectMu.Unlock()
+
+	projectRoot, initResult, err := s.ensureDefaultProject(ctx)
+	if err != nil {
+		return model.ProjectSourceFileResponse{}, initResult, err
+	}
+	relPath, err := normalizeProjectSourcePath(req.Path)
+	if err != nil {
+		return model.ProjectSourceFileResponse{}, forge.Result{}, err
+	}
+	sourcePath := filepath.Join(projectRoot, "src", filepath.FromSlash(relPath))
+	if err := os.MkdirAll(filepath.Dir(sourcePath), 0o755); err != nil {
+		return model.ProjectSourceFileResponse{}, forge.Result{}, err
+	}
+	if err := os.WriteFile(sourcePath, []byte(req.Source), 0o644); err != nil {
+		return model.ProjectSourceFileResponse{}, forge.Result{}, err
+	}
+	return model.ProjectSourceFileResponse{ProjectPath: projectRoot, Path: sourcePath}, initResult, nil
+}
+
+func (s *Service) ensureDefaultProject(ctx context.Context) (string, forge.Result, error) {
+	projectRoot := s.defaultProjectRoot()
+	if strings.TrimSpace(projectRoot) == "" {
+		return "", forge.Result{}, fmt.Errorf("default project root is not configured")
+	}
+	if _, err := os.Stat(filepath.Join(projectRoot, "foundry.toml")); err == nil {
+		return projectRoot, forge.Result{}, nil
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return projectRoot, forge.Result{}, err
+	}
+	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+		return "", forge.Result{}, err
+	}
+
+	initResult := s.forge.Run(ctx, "init", projectRoot, "--no-git")
+	if initResult.Err != nil {
+		return projectRoot, initResult, initResult.Err
+	}
+	if err := resetDefaultProjectDirs(projectRoot); err != nil {
+		return projectRoot, initResult, err
+	}
+	return projectRoot, initResult, nil
+}
+
+func (s *Service) defaultProjectRoot() string {
+	if strings.TrimSpace(s.cfg.DefaultProjectRoot) != "" {
+		return s.cfg.DefaultProjectRoot
+	}
+	return filepath.Join(s.cfg.WorkDir, "default-project")
+}
+
+func (s *Service) lockDefaultProjectIfUsed(projectPath string) func() {
+	if !s.usesDefaultProject(projectPath) {
+		return func() {}
+	}
+	s.defaultProjectMu.Lock()
+	return s.defaultProjectMu.Unlock
+}
+
+func (s *Service) usesDefaultProject(projectPath string) bool {
+	if strings.TrimSpace(projectPath) == "" {
+		return false
+	}
+	return pathInsideRoot(s.defaultProjectRoot(), projectPath)
+}
+
+func (s *Service) shouldBuildProjectSrc(projectRoot string) bool {
+	if !s.usesDefaultProject(projectRoot) {
+		return true
+	}
+	return projectHasSoliditySource(filepath.Join(projectRoot, "src"))
+}
+
+func pathInsideRoot(root string, child string) bool {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return false
+	}
+	childAbs, err := filepath.Abs(child)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(rootAbs, childAbs)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel))
+}
+
+func projectHasSoliditySource(srcDir string) bool {
+	found := false
+	_ = filepath.WalkDir(srcDir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || found {
+			return nil
+		}
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sol") {
+			found = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found
 }
 
 func deterministicTestName(source []byte) string {
@@ -707,6 +826,19 @@ func (s *Service) buildProjectSrc(ctx context.Context, execution foundryExecutio
 	args := []string{"build", "src", "--root", execution.Root, "--color", "never"}
 	args = append(args, solidity.ForgeCompilerArgsExplicit(compiler)...)
 	return s.forge.Run(ctx, args...)
+}
+
+func resetDefaultProjectDirs(projectRoot string) error {
+	for _, dir := range []string{"src", "test", "script"} {
+		path := filepath.Join(projectRoot, dir)
+		if err := os.RemoveAll(path); err != nil {
+			return err
+		}
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Service) writeStateOverrideSource(execution *foundryExecution, runID string, source string) (string, error) {

@@ -2,6 +2,7 @@ package simulation
 
 import (
 	"fmt"
+	"path"
 	"reflect"
 	"strings"
 
@@ -19,6 +20,7 @@ func newSimulateRequestValidator() *validator.Validate {
 	_ = validate.RegisterValidation("eth_address", validateAddress)
 	_ = validate.RegisterValidation("hex_bytes", validateHexBytes)
 	_ = validate.RegisterValidation("notblank", validateNotBlank)
+	_ = validate.RegisterValidation("solidity_source_path", validateSoliditySourcePath)
 	_ = validate.RegisterValidation("tx_hash", validateTxHash)
 	return validate
 }
@@ -31,6 +33,13 @@ func validateSimulateRequest(req *model.SimulateRequest) error {
 }
 
 func validateTxRequest(req *model.TxRequest) error {
+	if err := simulateRequestValidator.Struct(req); err != nil {
+		return formatValidationError(err)
+	}
+	return nil
+}
+
+func validateProjectSourceFileRequest(req *model.ProjectSourceFileRequest) error {
 	if err := simulateRequestValidator.Struct(req); err != nil {
 		return formatValidationError(err)
 	}
@@ -56,6 +65,11 @@ func validateHexBytes(level validator.FieldLevel) bool {
 
 func validateNotBlank(level validator.FieldLevel) bool {
 	return strings.TrimSpace(level.Field().String()) != ""
+}
+
+func validateSoliditySourcePath(level validator.FieldLevel) bool {
+	_, err := normalizeProjectSourcePath(level.Field().String())
+	return err == nil
 }
 
 func validateTxHash(level validator.FieldLevel) bool {
@@ -88,6 +102,8 @@ func formatValidationError(err error) error {
 		return fmt.Errorf("%s must be even-length hex bytes", field)
 	case "tx_hash":
 		return fmt.Errorf("%s must be a 32-byte transaction hash", field)
+	case "solidity_source_path":
+		return fmt.Errorf("%s must be a relative .sol path under src", field)
 	default:
 		return fmt.Errorf("%s is invalid", field)
 	}
@@ -97,8 +113,25 @@ func validationFieldPath(fieldError validator.FieldError) string {
 	namespace := fieldError.Namespace()
 	namespace = strings.TrimPrefix(namespace, "SimulateRequest.")
 	namespace = strings.TrimPrefix(namespace, "TxRequest.")
+	namespace = strings.TrimPrefix(namespace, "ProjectSourceFileRequest.")
 	if namespace == "" {
 		return fieldError.Field()
 	}
 	return namespace
+}
+
+func normalizeProjectSourcePath(value string) (string, error) {
+	cleaned := strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
+	cleaned = strings.TrimPrefix(cleaned, "src/")
+	if strings.Contains(cleaned, ":") {
+		return "", fmt.Errorf("path must not contain a volume name")
+	}
+	cleaned = path.Clean(cleaned)
+	if cleaned == "." || strings.HasPrefix(cleaned, "/") || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return "", fmt.Errorf("path must be relative to src")
+	}
+	if !strings.HasSuffix(cleaned, ".sol") {
+		return "", fmt.Errorf("path must end with .sol")
+	}
+	return cleaned, nil
 }

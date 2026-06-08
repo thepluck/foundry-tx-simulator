@@ -7,6 +7,8 @@ export type {
   ERC20Transfer,
   ERC721ApprovalOverride,
   LabelOverride,
+  ProjectSourceFileRequest,
+  ProjectSourceFileResponse,
   ProjectsResponse,
   RequestKind,
   RunRequest,

@@ -25,6 +25,16 @@ type SimulateRequest struct {
 	Value                   Uint256                  `json:"value,omitempty"`
 }
 
+type ProjectSourceFileRequest struct {
+	Path   string `json:"path" validate:"required,solidity_source_path"`
+	Source string `json:"source" validate:"required,notblank"`
+}
+
+type ProjectSourceFileResponse struct {
+	ProjectPath string `json:"projectPath"`
+	Path        string `json:"path"`
+}
+
 type TxRequest struct {
 	Chain          string `json:"chain" validate:"required"`
 	TxHash         string `json:"txHash" validate:"required,tx_hash"`

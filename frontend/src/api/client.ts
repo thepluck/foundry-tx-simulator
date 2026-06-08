@@ -1,9 +1,19 @@
-import type { ChainConfig, ProjectsResponse, SimulateRequest, SimulateResponse, SimulationRecord, TxRequest } from "./types";
+import type {
+  ChainConfig,
+  ProjectSourceFileRequest,
+  ProjectSourceFileResponse,
+  ProjectsResponse,
+  SimulateRequest,
+  SimulateResponse,
+  SimulationRecord,
+  TxRequest
+} from "./types";
 import type { ZodType } from "zod";
 import {
   browseProjectResponseSchema,
   chainConfigSchema,
   errorResponseSchema,
+  projectSourceFileResponseSchema,
   projectsResponseSchema,
   simulationRecordSchema,
   simulateResponseSchema
@@ -47,6 +57,21 @@ export async function browseProject(apiUrl: string): Promise<string> {
     throw new Error(errorMessage(payload, `browse project request failed: ${response.status}`));
   }
   return parsePayload(browseProjectResponseSchema, payload, "browse project").path;
+}
+
+export async function addProjectSourceFile(apiUrl: string, request: ProjectSourceFileRequest): Promise<ProjectSourceFileResponse> {
+  const response = await fetch(`${trimSlash(apiUrl)}/projects/default/source`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(request)
+  });
+  const payload = await readJSON(response);
+  if (!response.ok) {
+    throw new Error(errorMessage(payload, `project source request failed: ${response.status}`));
+  }
+  return parsePayload(projectSourceFileResponseSchema, payload, "project source");
 }
 
 export async function fetchSimulationRecord(apiUrl: string, requestId: string, signal?: AbortSignal): Promise<SimulationRecord> {
