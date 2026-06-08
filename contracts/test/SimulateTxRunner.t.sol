@@ -45,6 +45,7 @@ contract SimulateTxRunnerTest is Test {
     address sender;
     address target;
     bytes data;
+    uint256 value;
   }
 
   function testSimulateTx() public {
@@ -119,11 +120,11 @@ contract SimulateTxRunnerTest is Test {
       if (stateOverridingContract == address(0)) {
         revert("Failed to deploy state overriding contract");
       }
-      _callAndBubble(stateOverridingContract, "");
+      _callAndBubble(stateOverridingContract, "", 0);
     }
 
     vm.prank(request.sender);
-    _callAndBubble(request.target, request.data);
+    _callAndBubble(request.target, request.data, request.value);
   }
 
   function _readRequest(string memory json) internal view returns (SimulateRequest memory request) {
@@ -138,6 +139,7 @@ contract SimulateTxRunnerTest is Test {
     request.sender = vm.parseJsonAddress(json, ".sender");
     request.target = vm.parseJsonAddress(json, ".target");
     request.data = vm.parseJsonBytes(json, ".data");
+    request.value = _parseOptionalUint(json, ".value");
   }
 
   function _parseLabelOverrides(string memory json) internal view returns (LabelOverride[] memory) {
@@ -240,8 +242,8 @@ contract SimulateTxRunnerTest is Test {
     return string.concat(key, "[", vm.toString(index), "]");
   }
 
-  function _callAndBubble(address target, bytes memory data) internal {
-    (bool success, bytes memory returndata) = target.call(data);
+  function _callAndBubble(address target, bytes memory data, uint256 value) internal {
+    (bool success, bytes memory returndata) = target.call{value: value}(data);
     if (!success) {
       if (returndata.length > 0) {
         assembly {

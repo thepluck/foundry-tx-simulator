@@ -11,9 +11,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/rpc"
 
 	"foundry-tx-simulator/backend/internal/config"
 	"foundry-tx-simulator/backend/internal/forge"
@@ -32,6 +36,7 @@ const (
 	simulationTestName     = "testSimulateTx"
 	inputPathEnvName       = "TXSIM_INPUT_PATH"
 	senderLabel            = "Sender"
+	latestBlockTimeout     = 10 * time.Second
 )
 
 type forgeRunner interface {
@@ -185,7 +190,7 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 	releaseDefaultProject := s.lockDefaultProjectIfUsed(req.ProjectPath)
 	defer releaseDefaultProject()
 
-	rpcURL, err := s.validateRequest(&req)
+	rpcURL, err := s.validateRequest(parent, &req)
 	if err != nil {
 		resp.Error = err.Error()
 		return finish(http.StatusBadRequest)
@@ -491,7 +496,7 @@ func (s *Service) ReplayTx(parent context.Context, req model.TxRequest) (model.S
 	return finish(http.StatusOK)
 }
 
-func (s *Service) validateRequest(req *model.SimulateRequest) (string, error) {
+func (s *Service) validateRequest(ctx context.Context, req *model.SimulateRequest) (string, error) {
 	req.Chain = strings.TrimSpace(req.Chain)
 	projectPath, err := s.normalizeProjectPath(req.ProjectPath)
 	if err != nil {
@@ -508,6 +513,14 @@ func (s *Service) validateRequest(req *model.SimulateRequest) (string, error) {
 	}
 	if strings.TrimSpace(rpcURL) == "" {
 		return "", fmt.Errorf("rpc url for chain %q is empty after environment expansion", req.Chain)
+	}
+
+	if req.BlockNumber == "" {
+		latest, err := fetchLatestBlockNumber(ctx, rpcURL)
+		if err != nil {
+			return "", fmt.Errorf("fetch latest block number: %w", err)
+		}
+		req.BlockNumber = model.Uint256(latest)
 	}
 
 	normalizedData, err := solidity.NormalizeBytes("data", req.Data)
@@ -1013,4 +1026,21 @@ func (s *Service) acquireWorker(ctx context.Context) (*simulationWorker, func(),
 	case <-ctx.Done():
 		return nil, nil, ctx.Err()
 	}
+}
+
+func fetchLatestBlockNumber(ctx context.Context, rpcURL string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, latestBlockTimeout)
+	defer cancel()
+
+	client, err := rpc.DialContext(ctx, rpcURL)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	var blockNumber hexutil.Uint64
+	if err := client.CallContext(ctx, &blockNumber, "eth_blockNumber"); err != nil {
+		return "", err
+	}
+	return strconv.FormatUint(uint64(blockNumber), 10), nil
 }

@@ -22,6 +22,7 @@ import {
 export type SimulationRunResult = {
   requestId: string;
   response: SimulateResponse;
+  record: SimulationRecord;
 };
 
 export type RunRequestInput = { kind: "simulation"; request: SimulateRequest } | { kind: "tx"; request: TxRequest };
@@ -120,7 +121,18 @@ export async function runRequest(
   signal?: AbortSignal
 ): Promise<SimulationRunResult> {
   const response = input.kind === "tx" ? await replayTx(apiUrl, input.request, signal) : await simulate(apiUrl, input.request, signal);
-  return { requestId: response.id, response };
+  const fallbackRecord: SimulationRecord = {
+    id: response.id,
+    kind: input.kind,
+    request: input.request,
+    response
+  };
+  try {
+    const record = await fetchSimulationRecord(apiUrl, response.id, signal);
+    return { requestId: record.id, response: record.response, record };
+  } catch {
+    return { requestId: response.id, response, record: fallbackRecord };
+  }
 }
 
 function trimSlash(value: string): string {
