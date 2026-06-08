@@ -123,6 +123,9 @@ func validationFieldPath(fieldError validator.FieldError) string {
 func normalizeProjectSourcePath(value string) (string, error) {
 	cleaned := strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
 	cleaned = strings.TrimPrefix(cleaned, "src/")
+	if strings.Contains(cleaned, ":") {
+		return "", fmt.Errorf("path must not contain a volume name")
+	}
 	cleaned = path.Clean(cleaned)
 	if cleaned == "." || strings.HasPrefix(cleaned, "/") || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
 		return "", fmt.Errorf("path must be relative to src")

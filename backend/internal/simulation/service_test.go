@@ -659,11 +659,13 @@ func TestAddDefaultProjectSourceFileRejectsInvalidPathBeforeInit(t *testing.T) {
 	fake := &fakeForgeRunner{}
 	service.forge = fake
 
-	if _, _, err := service.AddDefaultProjectSourceFile(context.Background(), model.ProjectSourceFileRequest{
-		Path:   "../Escape.sol",
-		Source: "pragma solidity ^0.8.0;",
-	}); err == nil {
-		t.Fatal("expected path traversal to fail")
+	for _, sourcePath := range []string{"../Escape.sol", "C:/tmp/Evil.sol"} {
+		if _, _, err := service.AddDefaultProjectSourceFile(context.Background(), model.ProjectSourceFileRequest{
+			Path:   sourcePath,
+			Source: "pragma solidity ^0.8.0;",
+		}); err == nil {
+			t.Fatalf("expected source path %q to fail", sourcePath)
+		}
 	}
 	if len(fake.calls) != 0 {
 		t.Fatalf("invalid source path should not run forge init: %#v", fake.calls)

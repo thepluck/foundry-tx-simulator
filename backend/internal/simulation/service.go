@@ -57,6 +57,8 @@ type Service struct {
 
 	testCopiesMu sync.Mutex
 	testCopies   map[string]int
+
+	defaultProjectMu sync.Mutex
 }
 
 type foundryExecution struct {
@@ -179,6 +181,9 @@ func (s *Service) Simulate(parent context.Context, req model.SimulateRequest) (m
 		}
 		return resp, status
 	}
+
+	releaseDefaultProject := s.lockDefaultProjectIfUsed(req.ProjectPath)
+	defer releaseDefaultProject()
 
 	rpcURL, err := s.validateRequest(&req)
 	if err != nil {
@@ -662,6 +667,9 @@ func (s *Service) AddDefaultProjectSourceFile(ctx context.Context, req model.Pro
 	if err := validateProjectSourceFileRequest(&req); err != nil {
 		return model.ProjectSourceFileResponse{}, forge.Result{}, err
 	}
+	s.defaultProjectMu.Lock()
+	defer s.defaultProjectMu.Unlock()
+
 	projectRoot, initResult, err := s.ensureDefaultProject(ctx)
 	if err != nil {
 		return model.ProjectSourceFileResponse{}, initResult, err
@@ -711,8 +719,23 @@ func (s *Service) defaultProjectRoot() string {
 	return filepath.Join(s.cfg.WorkDir, "default-project")
 }
 
+func (s *Service) lockDefaultProjectIfUsed(projectPath string) func() {
+	if !s.usesDefaultProject(projectPath) {
+		return func() {}
+	}
+	s.defaultProjectMu.Lock()
+	return s.defaultProjectMu.Unlock
+}
+
+func (s *Service) usesDefaultProject(projectPath string) bool {
+	if strings.TrimSpace(projectPath) == "" {
+		return false
+	}
+	return pathInsideRoot(s.defaultProjectRoot(), projectPath)
+}
+
 func (s *Service) shouldBuildProjectSrc(projectRoot string) bool {
-	if !pathInsideRoot(s.defaultProjectRoot(), projectRoot) {
+	if !s.usesDefaultProject(projectRoot) {
 		return true
 	}
 	return projectHasSoliditySource(filepath.Join(projectRoot, "src"))
